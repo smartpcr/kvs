@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net472;net8.0;net9.0</TargetFrameworks>
+    <AssemblyName>Kvs</AssemblyName>
+    <RootNamespace>Kvs</RootNamespace>
+    <PackageId>Kvs</PackageId>
+    <Description>A simple key-value store library</Description>
+    <PackageTags>kvs;key-value;store;database</PackageTags>
+  </PropertyGroup>
+
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
+    <PackageReference Include="System.Memory" />
+    <PackageReference Include="System.Threading.Tasks.Extensions" />
+  </ItemGroup>
+
+</Project>
