@@ -58,6 +58,7 @@ public class SkipList<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>, I
     private readonly ReaderWriterLockSlim rwLock;
     private int level;
     private int count;
+    private bool disposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SkipList{TKey, TValue}"/> class.
@@ -103,6 +104,8 @@ public class SkipList<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>, I
     /// <returns>True if the key was inserted; false if it already existed and was updated.</returns>
     public bool Insert(TKey key, TValue value)
     {
+        this.ThrowIfDisposed();
+
         if (key == null)
         {
             throw new ArgumentNullException(nameof(key));
@@ -176,6 +179,8 @@ public class SkipList<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>, I
     public TValue? Search(TKey key)
 #endif
     {
+        this.ThrowIfDisposed();
+
         if (key == null)
         {
             throw new ArgumentNullException(nameof(key));
@@ -217,6 +222,8 @@ public class SkipList<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>, I
     /// <returns>True if the key was found; false otherwise.</returns>
     public bool TryGetValue(TKey key, out TValue value)
     {
+        this.ThrowIfDisposed();
+
         if (key == null)
         {
             throw new ArgumentNullException(nameof(key));
@@ -259,6 +266,8 @@ public class SkipList<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>, I
     /// <returns>True if the key was deleted; false if it was not found.</returns>
     public bool Delete(TKey key)
     {
+        this.ThrowIfDisposed();
+
         if (key == null)
         {
             throw new ArgumentNullException(nameof(key));
@@ -322,6 +331,8 @@ public class SkipList<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>, I
     /// <returns>True if the key exists; false otherwise.</returns>
     public bool ContainsKey(TKey key)
     {
+        this.ThrowIfDisposed();
+
         if (key == null)
         {
             throw new ArgumentNullException(nameof(key));
@@ -357,6 +368,8 @@ public class SkipList<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>, I
     /// <returns>An enumerable of key-value pairs in the range.</returns>
     public IEnumerable<KeyValuePair<TKey, TValue>> Range(TKey startKey, TKey endKey)
     {
+        this.ThrowIfDisposed();
+
         if (startKey == null)
         {
             throw new ArgumentNullException(nameof(startKey));
@@ -416,6 +429,8 @@ public class SkipList<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>, I
     public TKey? GetMinKey()
 #endif
     {
+        this.ThrowIfDisposed();
+
         this.rwLock.EnterReadLock();
         try
         {
@@ -438,6 +453,8 @@ public class SkipList<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>, I
     public TKey? GetMaxKey()
 #endif
     {
+        this.ThrowIfDisposed();
+
         this.rwLock.EnterReadLock();
         try
         {
@@ -468,6 +485,8 @@ public class SkipList<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>, I
     /// </summary>
     public void Clear()
     {
+        this.ThrowIfDisposed();
+
         this.rwLock.EnterWriteLock();
         try
         {
@@ -495,6 +514,8 @@ public class SkipList<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>, I
     /// <returns>An enumerator for the skip list.</returns>
     public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator()
     {
+        this.ThrowIfDisposed();
+
         this.rwLock.EnterReadLock();
         try
         {
@@ -517,7 +538,16 @@ public class SkipList<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>, I
     /// <returns>An enumerator for the skip list.</returns>
     IEnumerator IEnumerable.GetEnumerator()
     {
+        this.ThrowIfDisposed();
         return this.GetEnumerator();
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (this.disposed)
+        {
+            throw new ObjectDisposedException(nameof(SkipList<TKey, TValue>));
+        }
     }
 
     /// <summary>
@@ -525,6 +555,11 @@ public class SkipList<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>, I
     /// </summary>
     public void Dispose()
     {
+        if (this.disposed)
+        {
+            return;
+        }
+
         this.Dispose(true);
         GC.SuppressFinalize(this);
     }
@@ -539,6 +574,8 @@ public class SkipList<TKey, TValue> : IEnumerable<KeyValuePair<TKey, TValue>>, I
         {
             this.rwLock?.Dispose();
         }
+
+        this.disposed = true;
     }
 
     private int RandomLevel()

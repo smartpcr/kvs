@@ -510,4 +510,30 @@ public class SkipListTests
         skipList.Dispose();
         Assert.True(true); // Test passed if no exception
     }
+
+    [Fact]
+    public void Operations_AfterDispose_ShouldThrowObjectDisposedException()
+    {
+        // Arrange
+        var skipList = new SkipList<int, string>();
+        skipList.Dispose();
+
+        // Act & Assert
+        Assert.Throws<ObjectDisposedException>(() => skipList.Insert(1, "one"));
+        Assert.Throws<ObjectDisposedException>(() => skipList.Search(1));
+        Assert.Throws<ObjectDisposedException>(() => skipList.TryGetValue(1, out _));
+        Assert.Throws<ObjectDisposedException>(() => skipList.Delete(1));
+        Assert.Throws<ObjectDisposedException>(() => skipList.ContainsKey(1));
+        Assert.Throws<ObjectDisposedException>(() => skipList.Range(1, 2).ToList());
+        Assert.Throws<ObjectDisposedException>(() => skipList.GetMinKey());
+        Assert.Throws<ObjectDisposedException>(() => skipList.GetMaxKey());
+        Assert.Throws<ObjectDisposedException>(() => skipList.Clear());
+        Assert.Throws<ObjectDisposedException>(() =>
+        {
+            foreach (var kvp in skipList)
+            {
+                _ = kvp;
+            }
+        });
+    }
 }
