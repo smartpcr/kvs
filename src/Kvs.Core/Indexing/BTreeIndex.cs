@@ -122,17 +122,42 @@ public class BTreeIndex<TKey, TValue> : IIndex<TKey, TValue>
 
     private async IAsyncEnumerable<KeyValuePair<TKey, TValue>> RangeAsyncCore(TKey startKey, TKey endKey)
     {
-        IEnumerable<KeyValuePair<TKey, TValue>> results;
+        IEnumerator<KeyValuePair<TKey, TValue>> enumerator;
         lock (this.lockObject)
         {
-            // Create a snapshot to avoid holding the lock during enumeration
-            results = new List<KeyValuePair<TKey, TValue>>(this.btree.Range(startKey, endKey));
+            enumerator = this.btree.Range(startKey, endKey).GetEnumerator();
         }
 
-        foreach (var kvp in results)
+        try
         {
-            yield return kvp;
-            await Task.Yield(); // Allow other tasks to run
+            while (true)
+            {
+                bool hasNext;
+                KeyValuePair<TKey, TValue> current = default!;
+                lock (this.lockObject)
+                {
+                    hasNext = enumerator.MoveNext();
+                    if (hasNext)
+                    {
+                        current = enumerator.Current;
+                    }
+                }
+
+                if (!hasNext)
+                {
+                    break;
+                }
+
+                yield return current;
+                await Task.Yield();
+            }
+        }
+        finally
+        {
+            lock (this.lockObject)
+            {
+                enumerator.Dispose();
+            }
         }
     }
 
@@ -141,17 +166,42 @@ public class BTreeIndex<TKey, TValue> : IIndex<TKey, TValue>
     {
         this.ThrowIfDisposed();
 
-        IEnumerable<KeyValuePair<TKey, TValue>> results;
+        IEnumerator<KeyValuePair<TKey, TValue>> enumerator;
         lock (this.lockObject)
         {
-            // Create a snapshot to avoid holding the lock during enumeration
-            results = new List<KeyValuePair<TKey, TValue>>(this.btree.GetAll());
+            enumerator = this.btree.GetAll().GetEnumerator();
         }
 
-        foreach (var kvp in results)
+        try
         {
-            yield return kvp;
-            await Task.Yield(); // Allow other tasks to run
+            while (true)
+            {
+                bool hasNext;
+                KeyValuePair<TKey, TValue> current = default!;
+                lock (this.lockObject)
+                {
+                    hasNext = enumerator.MoveNext();
+                    if (hasNext)
+                    {
+                        current = enumerator.Current;
+                    }
+                }
+
+                if (!hasNext)
+                {
+                    break;
+                }
+
+                yield return current;
+                await Task.Yield();
+            }
+        }
+        finally
+        {
+            lock (this.lockObject)
+            {
+                enumerator.Dispose();
+            }
         }
     }
 
