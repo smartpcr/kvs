@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Kvs.Core.Serialization;
@@ -200,6 +201,33 @@ public class WALTests : IDisposable
         var entries = await this.wal.ReadEntriesAsync(lsn);
 
         entries.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CheckpointLsn_ShouldPersist_AfterReopen()
+    {
+        var entry = this.CreateTestEntry("tx1", "value1");
+        var lsn = await this.wal.WriteEntryAsync(entry);
+
+        await this.wal.CheckpointAsync(lsn);
+
+        this.wal.Dispose();
+        this.storageEngine.Dispose();
+
+        var newStorage = new FileStorageEngine(this.testFilePath);
+        var newWal = new WAL(newStorage, this.serializer);
+
+        var entries = await newWal.ReadEntriesAsync(0);
+        var lastCheckpoint = entries
+            .Where(e => e.OperationType == OperationType.Checkpoint)
+            .Select(e => e.Lsn)
+            .DefaultIfEmpty(0)
+            .Max();
+
+        lastCheckpoint.Should().Be(lsn);
+
+        newWal.Dispose();
+        newStorage.Dispose();
     }
 
     private TransactionLogEntry CreateTestEntry(string transactionId, string value)
