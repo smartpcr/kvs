@@ -177,6 +177,27 @@ public class WALTests : IDisposable
         lastLsn.Should().Be(lsn);
     }
 
+    [Fact]
+    public async Task ReadEntriesAsync_ShouldSkipCorruptedEntries()
+    {
+        var entry = this.CreateTestEntry("tx1", "value1");
+        var lsn = await this.wal.WriteEntryAsync(entry);
+        await this.wal.FlushAsync();
+
+        // Corrupt the checksum in the log file
+        using (var stream = new FileStream(this.testFilePath, FileMode.Open, FileAccess.ReadWrite))
+        {
+            stream.Seek(-1, SeekOrigin.End);
+            var current = stream.ReadByte();
+            stream.Seek(-1, SeekOrigin.End);
+            stream.WriteByte((byte)(current ^ 0xFF));
+        }
+
+        var entries = await this.wal.ReadEntriesAsync(lsn);
+
+        entries.Should().BeEmpty();
+    }
+
     private TransactionLogEntry CreateTestEntry(string transactionId, string value)
     {
         return new TransactionLogEntry(
