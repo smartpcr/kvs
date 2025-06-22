@@ -562,6 +562,33 @@ public async Task Should_Maintain_Consistency_During_Leader_Failure()
 }
 ```
 
+### Detailed Test Scenarios
+
+1. **WAL Crash Recovery**
+   - **Setup**: Start a node, execute several transactions and force a crash before a checkpoint is written.
+   - **Actions**: Restart the node and run the recovery process.
+   - **Expected**: The WAL is replayed so committed transactions are restored and incomplete ones are rolled back.
+
+2. **Raft Leader Election**
+   - **Setup**: Launch a three-node cluster and identify the current leader.
+   - **Actions**: Terminate the leader process and observe election messages.
+   - **Expected**: A follower becomes leader within the election timeout and client writes succeed.
+
+3. **Network Partition Handling**
+   - **Setup**: Deploy a five-node cluster and start a steady workload.
+   - **Actions**: Partition the network into majority and minority sets.
+   - **Expected**: The majority continues processing writes while the minority remains read-only until the partition heals.
+
+4. **Disk Failure Recovery**
+   - **Setup**: Configure WAL on durable storage for a running node.
+   - **Actions**: Simulate a disk failure during a write and restart the node on a new disk.
+   - **Expected**: Recovery replays the WAL up to the last synced entry with no data loss.
+
+5. **Log Replication Consistency**
+   - **Setup**: Enable synchronous replication across multiple nodes.
+   - **Actions**: Write a batch of data and inspect follower logs after replication.
+   - **Expected**: Follower WALs match the leader and all nodes contain identical data after recovery.
+
 ## Deployment Architecture
 
 ### Single Node Deployment

@@ -57,23 +57,35 @@ Build a lightweight NoSQL key-value store database in C# with document storage c
 - [x] Add comprehensive XML documentation for all public members
 - [x] Implement multi-framework support (.NET Framework 4.7.2, .NET 8.0, .NET 9.0)
 
-**Phase 1 Tests:** ✅ 100% Complete (81/81 tests passing)
-- [x] `StorageEngineTests` - File operations, async I/O, and edge cases
-- [x] `PageTests` - Page header integrity, data operations, and validation
-- [x] `PageManagerTests` - Page allocation, caching, and lifecycle management
-- [x] `SerializationTests` - Binary serializer functionality and type support
-- [x] `WALTests` - Write-ahead logging, LSN management, and entry validation
-- [x] `CheckpointTests` - Checkpoint manager with automatic and manual checkpointing
-- [x] `RecoveryTests` - ARIES recovery phases and transaction rollback
-
-**Additional Implemented Components (not in original plan):**
-- [x] `PageType` enum for different page types (Free, Header, Data, etc.)
-- [x] `PageHeader` struct with checksums and integrity validation
-- [x] `OperationType` enum for transaction operations (Insert, Update, Delete, Commit, Rollback, Checkpoint)
-- [x] `RecoveryPhase` enum for ARIES recovery phases (Analysis, Redo, Undo)
-- [x] `CheckpointCompletedEventArgs` for checkpoint completion events
-- [x] Enhanced error handling with comprehensive validation throughout
-- [x] Memory-safe operations using ReadOnlyMemory<byte> instead of byte arrays
+**Phase 1 Tests:**
+- [ ] `StorageEngineTests` - Basic read/write operations
+  - **Setup**: Initialize a temporary `FileStorageEngine` instance.
+  - **Actions**: Write a block of data, flush, then read it back.
+  - **Expected**: Retrieved bytes match what was written.
+- [ ] `PageTests` - Page structure and operations
+  - **Setup**: Create a `Page` object in memory.
+  - **Actions**: Insert records and serialize/deserialize the page.
+  - **Expected**: Deserialized data equals the original records.
+- [ ] `PageManagerTests` - Page allocation/deallocation
+  - **Setup**: Instantiate `PageManager` against a temp file.
+  - **Actions**: Allocate a page, release it, then reallocate.
+  - **Expected**: Allocation table reflects the expected free/used pages.
+- [ ] `SerializationTests` - Binary serialization/deserialization
+  - **Setup**: Prepare a sample object graph.
+  - **Actions**: Serialize to binary, then deserialize.
+  - **Expected**: The deserialized object matches the original.
+- [ ] `WALTests` - Write-ahead log operations and persistence
+  - **Setup**: Open a WAL file with forced sync enabled.
+  - **Actions**: Append log entries and reopen the file.
+  - **Expected**: All entries are present and in order.
+- [ ] `CheckpointTests` - WAL compaction and checkpoint creation
+  - **Setup**: Perform several writes to generate WAL segments.
+  - **Actions**: Trigger a checkpoint operation.
+  - **Expected**: WAL size is reduced and a checkpoint record exists.
+- [ ] `RecoveryTests` - Crash recovery and WAL replay
+  - **Setup**: Write data without checkpointing and simulate a crash.
+  - **Actions**: Restart the engine and run recovery.
+  - **Expected**: Committed transactions are restored; incomplete ones rolled back.
 
 ### Phase 2: Data Structures (Week 2) - ✅ COMPLETED
 - [x] Implement `BTree<TKey, TValue>` class with full CRUD operations
@@ -84,24 +96,27 @@ Build a lightweight NoSQL key-value store database in C# with document storage c
 - [x] Implement `SkipList<TKey, TValue>` with probabilistic balancing
 - [x] Implement `HashIndex<TKey, TValue>` for O(1) operations
 
-**Phase 2 Tests:** ✅ 100% Complete (179/179 tests passing)
-- [x] `BTreeTests` - B-Tree insertion, deletion, search operations
-- [x] `NodeTests` - B-Tree node splitting and merging
-- [x] `BTreeIndexTests` - Primary key indexing functionality  
-- [x] `LRUCacheTests` - Cache eviction and memory management
-- [x] `SkipListTests` - SkipList operations and concurrency
-- [x] `HashIndexTests` - Hash-based indexing and IIndex compliance
-
-**Additional Implemented Components (not in original plan):**
-- [x] IAsyncEnumerable support via Microsoft.Bcl.AsyncInterfaces for .NET Framework 4.7.2
-- [x] GetLeftmostKeyValue() and GetRightmostKeyValue() methods for B-Tree edge cases
-- [x] Comprehensive B-Tree deletion algorithm with predecessor/successor handling
-- [x] Thread-safe operations for concurrent access
-- [x] Statistics collection for monitoring and debugging
-- [x] SkipList with ReaderWriterLockSlim for thread safety
-- [x] HashIndex based on ConcurrentDictionary for lock-free reads
-- [x] IDisposable pattern implementation for resource cleanup
-- [x] Range query support for all index types
+**Phase 2 Tests:**
+- [ ] `BTreeTests` - B-Tree insertion, deletion, search operations
+  - **Setup**: Create an empty `BTree` instance.
+  - **Actions**: Insert keys, query them, then delete and verify absence.
+  - **Expected**: Searches return correct results before and after deletion.
+- [ ] `NodeTests` - B-Tree node splitting and merging
+  - **Setup**: Instantiate a node near its capacity.
+  - **Actions**: Insert enough keys to trigger a split and then a merge.
+  - **Expected**: Tree structure remains balanced after operations.
+- [ ] `IndexTests` - Index interface operations
+  - **Setup**: Initialize an implementation of `IIndex`.
+  - **Actions**: Put and get several key/value pairs.
+  - **Expected**: Retrieved values match inserted data.
+- [ ] `BTreeIndexTests` - Primary key indexing functionality
+  - **Setup**: Create a `BTreeIndex` bound to a collection.
+  - **Actions**: Index documents and lookup by key.
+  - **Expected**: Lookups return the expected document identifiers.
+- [ ] `LRUCacheTests` - Cache eviction and memory management
+  - **Setup**: Instantiate `LRUCache` with a small capacity.
+  - **Actions**: Add more entries than the capacity and access some entries repeatedly.
+  - **Expected**: Least recently used items are evicted first.
 
 ### Phase 3: Database Core (Week 3)
 - [ ] Create `Database` class as main entry point
@@ -115,13 +130,37 @@ Build a lightweight NoSQL key-value store database in C# with document storage c
 
 **Phase 3 Tests:**
 - [ ] `DatabaseTests` - Database lifecycle and collection management
+  - **Setup**: Create a new database instance and open a collection.
+  - **Actions**: Insert a document, close and reopen the database.
+  - **Expected**: Data persists and collections load correctly.
 - [ ] `CollectionTests` - Document storage and retrieval
+  - **Setup**: Obtain a reference to a test collection.
+  - **Actions**: Insert documents and query by id.
+  - **Expected**: Retrieved documents match the inserted content.
 - [ ] `DocumentTests` - JSON document handling and validation
+  - **Setup**: Define a JSON document with required fields.
+  - **Actions**: Save and then reload the document.
+  - **Expected**: Deserialized document equals the original JSON.
 - [ ] `TransactionTests` - ACID properties and transaction lifecycle
+  - **Setup**: Begin a new transaction.
+  - **Actions**: Perform multiple writes then commit.
+  - **Expected**: All changes become visible atomically after commit.
 - [ ] `TwoPhaseCommitTests` - Distributed transaction coordination
+  - **Setup**: Start transactions on multiple nodes.
+  - **Actions**: Run prepare/commit sequence across the cluster.
+  - **Expected**: Either all nodes commit or all rollback on failure.
 - [ ] `IsolationTests` - Transaction isolation level verification
+  - **Setup**: Begin concurrent transactions with different isolation levels.
+  - **Actions**: Read and write overlapping keys.
+  - **Expected**: Observed behavior matches the specified isolation semantics.
 - [ ] `DeadlockTests` - Deadlock detection and resolution
+  - **Setup**: Launch two transactions that lock resources in opposite order.
+  - **Actions**: Wait for deadlock detection logic to trigger.
+  - **Expected**: System aborts one transaction to break the deadlock.
 - [ ] `TransactionTimeoutTests` - Timeout and abort mechanisms
+  - **Setup**: Begin a transaction with a short timeout.
+  - **Actions**: Hold a lock beyond the timeout period.
+  - **Expected**: Transaction is automatically aborted.
 
 ### Phase 4: Query Engine (Week 4)
 - [ ] Define `Query` class with JSON syntax
@@ -132,12 +171,33 @@ Build a lightweight NoSQL key-value store database in C# with document storage c
 
 **Phase 4 Tests:**
 - [ ] `QueryTests` - JSON query syntax validation
+  - **Setup**: Define a query string with various operators.
+  - **Actions**: Parse the string and validate the output structure.
+  - **Expected**: Parser returns a valid query object with no errors.
 - [ ] `QueryParserTests` - Query parsing and validation
+  - **Setup**: Instantiate the `QueryParser`.
+  - **Actions**: Parse valid and invalid queries.
+  - **Expected**: Valid queries succeed, invalid ones throw meaningful errors.
 - [ ] `QueryExecutorTests` - Query execution and optimization
+  - **Setup**: Load a collection with sample documents.
+  - **Actions**: Execute queries with filters and sorts.
+  - **Expected**: Results match the query criteria and come back in the expected order.
 - [ ] `FilterTests` - Filter operations and logic
+  - **Setup**: Insert documents containing various field values.
+  - **Actions**: Apply filters on different fields.
+  - **Expected**: Only matching documents are returned.
 - [ ] `SortingTests` - Sorting algorithms and performance
+  - **Setup**: Store a set of unsorted records.
+  - **Actions**: Query with ascending and descending sort options.
+  - **Expected**: Results are sorted properly without excessive latency.
 - [ ] `PaginationTests` - Pagination logic and efficiency
+  - **Setup**: Populate more records than the default page size.
+  - **Actions**: Request successive pages.
+  - **Expected**: Each page contains the correct subset of records.
 - [ ] `AggregationTests` - Basic aggregation operations
+  - **Setup**: Store numeric documents for aggregation.
+  - **Actions**: Run sum and average queries.
+  - **Expected**: Aggregated values equal those calculated manually.
 
 ### Phase 5: Concurrency & Performance (Week 5)
 - [ ] Add `ReaderWriterLockSlim` for thread safety
@@ -153,15 +213,45 @@ Build a lightweight NoSQL key-value store database in C# with document storage c
 
 **Phase 5 Tests:**
 - [ ] `ConcurrencyTests` - Thread safety and locking mechanisms
+  - **Setup**: Run multiple threads against a shared database instance.
+  - **Actions**: Perform concurrent reads and writes.
+  - **Expected**: No data races or unhandled exceptions occur.
 - [ ] `ConnectionPoolTests` - Connection pooling and resource management
+  - **Setup**: Initialize a connection pool with limited size.
+  - **Actions**: Borrow and return connections under load.
+  - **Expected**: Pool reuses connections without leaks.
 - [ ] `AsyncTests` - Async/await pattern validation
+  - **Setup**: Use asynchronous API calls.
+  - **Actions**: Await multiple operations concurrently.
+  - **Expected**: Tasks complete without deadlocks or thread starvation.
 - [ ] `BenchmarkTests` - Performance baseline measurements
+  - **Setup**: Configure BenchmarkDotNet harness.
+  - **Actions**: Measure read and write throughput.
+  - **Expected**: Results meet documented performance goals.
 - [ ] `HotPathTests` - Critical path optimization verification
+  - **Setup**: Instrument hot methods with timers.
+  - **Actions**: Execute typical workloads.
+  - **Expected**: Latencies remain within targeted thresholds.
 - [ ] `MonitoringTests` - Performance monitoring accuracy
+  - **Setup**: Enable built-in metrics collection.
+  - **Actions**: Perform a mix of operations.
+  - **Expected**: Reported metrics reflect actual operation counts.
 - [ ] `StressTests` - High-load and endurance testing
+  - **Setup**: Prepare large data sets and continuous workload generator.
+  - **Actions**: Run system under sustained load for extended time.
+  - **Expected**: No crashes or resource exhaustion.
 - [ ] `ParallelTests` - Parallel execution correctness
+  - **Setup**: Spawn many tasks that operate on the database simultaneously.
+  - **Actions**: Mix read and write operations across tasks.
+  - **Expected**: All operations succeed and final data state is consistent.
 - [ ] `ChaosTests` - Failure injection and recovery
+  - **Setup**: Operate a multi-node cluster.
+  - **Actions**: Inject faults such as process termination and disk errors.
+  - **Expected**: Cluster remains available and recovers automatically.
 - [ ] `ProfilingTests` - Performance profiling validation
+  - **Setup**: Attach profilers during typical workloads.
+  - **Actions**: Collect CPU and memory profiles.
+  - **Expected**: Profiling output identifies hotspots without affecting stability.
 
 ### Phase 6: Clustering & Replication (Week 6)
 - [ ] Implement `IClusterManager` interface
@@ -176,14 +266,41 @@ Build a lightweight NoSQL key-value store database in C# with document storage c
 
 **Phase 6 Tests:**
 - [ ] `ClusterManagerTests` - Cluster membership and management
+  - **Setup**: Start a cluster with multiple nodes.
+  - **Actions**: Add and remove nodes via the cluster manager.
+  - **Expected**: Membership list reflects the changes on all nodes.
 - [ ] `RaftConsensusTests` - Raft algorithm implementation
+  - **Setup**: Launch several nodes running the Raft implementation.
+  - **Actions**: Force elections and replicate log entries.
+  - **Expected**: Consensus is reached with a single leader and identical logs.
 - [ ] `NodeRegistryTests` - Node discovery and registration
+  - **Setup**: Create a fresh node registry.
+  - **Actions**: Register nodes and query their status.
+  - **Expected**: Nodes are discoverable and status information is accurate.
 - [ ] `ReplicationManagerTests` - Data synchronization and consistency
+  - **Setup**: Stand up a leader and a follower node.
+  - **Actions**: Write data to the leader and allow replication.
+  - **Expected**: Follower contains the same data as the leader.
 - [ ] `HealthMonitorTests` - Node health monitoring and detection
+  - **Setup**: Enable health checks on all nodes.
+  - **Actions**: Simulate a node failure.
+  - **Expected**: Health monitor reports the failure within the configured interval.
 - [ ] `FailoverManagerTests` - Automatic failover mechanisms
+  - **Setup**: Configure a cluster with failover enabled.
+  - **Actions**: Kill the leader node.
+  - **Expected**: Another node is promoted to leader automatically.
 - [ ] `QuorumTests` - Quorum-based operation validation
+  - **Setup**: Create a three-node cluster.
+  - **Actions**: Attempt writes with and without quorum.
+  - **Expected**: Writes succeed only when a quorum of nodes acknowledges.
 - [ ] `DistributedWALTests` - Distributed WAL replication
+  - **Setup**: Enable WAL replication to all followers.
+  - **Actions**: Append log entries on the leader.
+  - **Expected**: Each follower stores the same WAL entries.
 - [ ] `CrossNodeTransactionTests` - Multi-node transaction coordination
+  - **Setup**: Begin a distributed transaction touching multiple nodes.
+  - **Actions**: Commit the transaction through the coordinator.
+  - **Expected**: All nodes either commit or rollback in unison.
 
 ### Phase 7: High Availability (Week 7)
 - [ ] Implement leader election protocols
@@ -195,12 +312,33 @@ Build a lightweight NoSQL key-value store database in C# with document storage c
 
 **Phase 7 Tests:**
 - [ ] `LeaderElectionTests` - Leader election algorithm verification
+  - **Setup**: Start a cluster with a stable leader.
+  - **Actions**: Stop the leader and wait for election.
+  - **Expected**: A new leader is elected within the timeout period.
 - [ ] `ConflictResolutionTests` - Concurrent write conflict handling
+  - **Setup**: Enable replication across nodes.
+  - **Actions**: Issue conflicting writes to the same key from different nodes.
+  - **Expected**: System resolves conflicts according to the configured strategy.
 - [ ] `QuorumOperationTests` - Quorum-based read/write operations
+  - **Setup**: Configure a three-node cluster.
+  - **Actions**: Execute reads and writes with varying node availability.
+  - **Expected**: Operations succeed only when the quorum requirement is met.
 - [ ] `SplitBrainTests` - Split-brain detection and prevention
+  - **Setup**: Partition a cluster into two equal halves.
+  - **Actions**: Attempt writes on both partitions.
+  - **Expected**: Only the partition with quorum accepts writes; the other rejects them.
 - [ ] `NetworkPartitionTests` - Network partition tolerance
+  - **Setup**: Run a five-node cluster under load.
+  - **Actions**: Introduce a network partition isolating two nodes.
+  - **Expected**: Majority partition continues processing; isolated nodes enter read-only mode.
 - [ ] `ConsistencyValidationTests` - Data consistency verification
+  - **Setup**: After partition healing, allow nodes to synchronize.
+  - **Actions**: Compare data across all replicas.
+  - **Expected**: Every node contains identical data sets.
 - [ ] `HighAvailabilityIntegrationTests` - End-to-end HA scenarios
+  - **Setup**: Deploy a production-like cluster with clients running.
+  - **Actions**: Simulate leader failures, network issues and node restarts.
+  - **Expected**: Service remains available and no acknowledged writes are lost.
 
 ## Project Structure
 
