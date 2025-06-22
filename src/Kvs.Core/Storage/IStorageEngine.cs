@@ -136,11 +136,4 @@ public interface IRecoveryManager
     /// </summary>
     /// <returns>A task that represents the asynchronous operation. The task result indicates whether recovery is needed.</returns>
     Task<bool> IsRecoveryNeededAsync();
-
-/* Unmerged change from project 'Kvs.Core(net8.0)'
-Before:
-}
-After:
-}
-*/
 }

@@ -254,11 +254,4 @@ public class PageManager(IStorageEngine storageEngine, int pageSize = Page.Defau
         this.freeListLock?.Dispose();
         this.pageCache?.Clear();
     }
-
-/* Unmerged change from project 'Kvs.Core(net8.0)'
-Before:
-}
-After:
-}
-*/
 }
