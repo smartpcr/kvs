@@ -397,35 +397,47 @@ public class BTree<TKey, TValue>
 
         if (!leftChild.IsMinimal && leftChild.KeyCount > 0)
         {
-            // Get predecessor from left subtree (rightmost key in left child)
-            var (predKey, predValue) = leftChild.GetRightmostKeyValue();
-            node.UpdateValueAt(keyIndex, predValue);
-            var oldKey = node.Keys[keyIndex];
-            node.RemoveAt(keyIndex);
-            node.InsertAt(keyIndex, predKey, predValue);
-            return this.DeleteInternal(leftChild, predKey);
+            try
+            {
+                // Get predecessor from left subtree (rightmost key in left child)
+                var (predKey, predValue) = leftChild.GetRightmostKeyValue();
+                node.UpdateValueAt(keyIndex, predValue);
+                var oldKey = node.Keys[keyIndex];
+                node.RemoveAt(keyIndex);
+                node.InsertAt(keyIndex, predKey, predValue);
+                return this.DeleteInternal(leftChild, predKey);
+            }
+            catch (InvalidOperationException)
+            {
+                // If we can't get predecessor, fall through to merge
+            }
         }
         else if (!rightChild.IsMinimal && rightChild.KeyCount > 0)
         {
-            // Get successor from right subtree
-            var (succKey, succValue) = rightChild.GetSuccessor(0);
-            node.UpdateValueAt(keyIndex, succValue);
-            var oldKey = node.Keys[keyIndex];
-            node.RemoveAt(keyIndex);
-            node.InsertAt(keyIndex, succKey, succValue);
-            return this.DeleteInternal(rightChild, succKey);
+            try
+            {
+                // Get successor from right subtree (leftmost key in right child)
+                var (succKey, succValue) = rightChild.GetLeftmostKeyValue();
+                node.UpdateValueAt(keyIndex, succValue);
+                var oldKey = node.Keys[keyIndex];
+                node.RemoveAt(keyIndex);
+                node.InsertAt(keyIndex, succKey, succValue);
+                return this.DeleteInternal(rightChild, succKey);
+            }
+            catch (InvalidOperationException)
+            {
+                // If we can't get successor, fall through to merge
+            }
         }
-        else
-        {
-            // Both children are minimal, merge them
-            var keyToDelete = node.Keys[keyIndex];
-            var valueToDelete = node.Values[keyIndex];
-            node.RemoveAt(keyIndex);
-            node.RemoveChildAt(keyIndex + 1);
 
-            leftChild.Merge(keyToDelete, valueToDelete, rightChild);
-            return this.DeleteInternal(leftChild, keyToDelete);
-        }
+        // Both children are minimal or we couldn't get predecessor/successor, merge them
+        var keyToDelete = node.Keys[keyIndex];
+        var valueToDelete = node.Values[keyIndex];
+        node.RemoveAt(keyIndex);
+        node.RemoveChildAt(keyIndex + 1);
+
+        leftChild.Merge(keyToDelete, valueToDelete, rightChild);
+        return this.DeleteInternal(leftChild, keyToDelete);
     }
 
     private void EnsureChildHasEnoughKeys(Node<TKey, TValue> parent, int childIndex)

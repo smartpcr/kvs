@@ -326,7 +326,17 @@ public class Node<TKey, TValue>
         var current = this.children[index];
         while (!current.IsLeaf)
         {
+            if (current.children.Count == 0)
+            {
+                throw new InvalidOperationException("Internal node has no children");
+            }
+
             current = current.children[current.children.Count - 1];
+        }
+
+        if (current.keys.Count == 0)
+        {
+            throw new InvalidOperationException("Cannot get predecessor from empty node");
         }
 
         var lastIndex = current.keys.Count - 1;
@@ -340,11 +350,27 @@ public class Node<TKey, TValue>
     public (TKey key, TValue value) GetRightmostKeyValue()
     {
         var current = this;
+
+        // If we're already at a leaf and have keys, return the rightmost one
+        if (current.IsLeaf && current.keys.Count > 0)
+        {
+            var lastIndex = current.keys.Count - 1;
+            return (current.keys[lastIndex], current.values[lastIndex]);
+        }
+
+        // Traverse to the rightmost leaf
         while (!current.IsLeaf)
         {
             if (current.children.Count == 0)
             {
-                throw new InvalidOperationException("Internal node has no children");
+                // If internal node has no children but has keys, return rightmost key
+                if (current.keys.Count > 0)
+                {
+                    var lastIndex = current.keys.Count - 1;
+                    return (current.keys[lastIndex], current.values[lastIndex]);
+                }
+
+                throw new InvalidOperationException("Internal node has no children or keys");
             }
 
             current = current.children[current.children.Count - 1];
@@ -355,8 +381,41 @@ public class Node<TKey, TValue>
             throw new InvalidOperationException("Cannot get rightmost key from empty node");
         }
 
-        var lastIndex = current.keys.Count - 1;
-        return (current.keys[lastIndex], current.values[lastIndex]);
+        var lastKeyIndex = current.keys.Count - 1;
+        return (current.keys[lastKeyIndex], current.values[lastKeyIndex]);
+    }
+
+    /// <summary>
+    /// Gets the leftmost key-value pair in this subtree.
+    /// </summary>
+    /// <returns>The leftmost key-value pair.</returns>
+    public (TKey key, TValue value) GetLeftmostKeyValue()
+    {
+        var current = this;
+
+        // Traverse to the leftmost leaf
+        while (!current.IsLeaf)
+        {
+            if (current.children.Count == 0)
+            {
+                // If internal node has no children but has keys, return leftmost key
+                if (current.keys.Count > 0)
+                {
+                    return (current.keys[0], current.values[0]);
+                }
+
+                throw new InvalidOperationException("Internal node has no children or keys");
+            }
+
+            current = current.children[0];
+        }
+
+        if (current.keys.Count == 0)
+        {
+            throw new InvalidOperationException("Cannot get leftmost key from empty node");
+        }
+
+        return (current.keys[0], current.values[0]);
     }
 
     /// <summary>
@@ -366,10 +425,25 @@ public class Node<TKey, TValue>
     /// <returns>The successor key-value pair.</returns>
     public (TKey key, TValue value) GetSuccessor(int index)
     {
+        if (index + 1 >= this.children.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), "Child index is out of range");
+        }
+
         var current = this.children[index + 1];
         while (!current.IsLeaf)
         {
+            if (current.children.Count == 0)
+            {
+                throw new InvalidOperationException("Internal node has no children");
+            }
+
             current = current.children[0];
+        }
+
+        if (current.keys.Count == 0)
+        {
+            throw new InvalidOperationException("Cannot get successor from empty node");
         }
 
         return (current.keys[0], current.values[0]);

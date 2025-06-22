@@ -122,11 +122,14 @@ public class PageManagerTests : IDisposable
     {
         var initialCount = await this.pageManager.GetPageCountAsync();
 
+        // For a new empty file, initial count should be 0
+        initialCount.Should().Be(0);
+
         await this.pageManager.AllocatePageAsync(PageType.Data);
         await this.pageManager.AllocatePageAsync(PageType.Data);
 
         var finalCount = await this.pageManager.GetPageCountAsync();
-        finalCount.Should().Be(initialCount + 2);
+        finalCount.Should().Be(2);
     }
 
     [Fact]
