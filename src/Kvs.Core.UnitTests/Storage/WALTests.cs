@@ -185,7 +185,11 @@ public class WALTests : IDisposable
         await this.wal.FlushAsync();
 
         // Corrupt the checksum in the log file
-        using (var stream = new FileStream(this.testFilePath, FileMode.Open, FileAccess.ReadWrite))
+        using (var stream = new FileStream(
+                   this.testFilePath,
+                   FileMode.Open,
+                   FileAccess.ReadWrite,
+                   FileShare.ReadWrite))
         {
             stream.Seek(-1, SeekOrigin.End);
             var current = stream.ReadByte();

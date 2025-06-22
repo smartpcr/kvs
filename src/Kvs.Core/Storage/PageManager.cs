@@ -70,6 +70,8 @@ public class PageManager(IStorageEngine storageEngine, int pageSize = Page.Defau
     private readonly Queue<long> freePages = new Queue<long>();
     private readonly ReaderWriterLockSlim freeListLock = new ReaderWriterLockSlim();
     private readonly SemaphoreSlim flushSemaphore = new SemaphoreSlim(1, 1);
+
+    // Start at -1 so the first allocated page receives ID 0.
     private long nextPageId = -1;
     private readonly int pageSize = pageSize;
     private readonly int maxCacheSize = maxCacheSize;
