@@ -113,6 +113,38 @@ namespace Kvs.Core.Storage
         }
 
         /// <inheritdoc />
+        public async Task WriteAsync(long position, ReadOnlyMemory<byte> data)
+        {
+            this.ThrowIfDisposed();
+
+            if (position < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(position));
+            }
+
+            if (data.IsEmpty)
+            {
+                return;
+            }
+
+            await this.writeSemaphore.WaitAsync();
+            try
+            {
+                this.fileStream.Seek(position, SeekOrigin.Begin);
+#if NET472
+                var bytes = data.ToArray();
+                await this.fileStream.WriteAsync(bytes, 0, bytes.Length);
+#else
+                await this.fileStream.WriteAsync(data);
+#endif
+            }
+            finally
+            {
+                this.writeSemaphore.Release();
+            }
+        }
+
+        /// <inheritdoc />
         public async Task FlushAsync()
         {
             this.ThrowIfDisposed();

@@ -24,6 +24,14 @@ public interface IStorageEngine : IDisposable
     Task<long> WriteAsync(ReadOnlyMemory<byte> data);
 
     /// <summary>
+    /// Writes data to the storage at the specified position.
+    /// </summary>
+    /// <param name="position">The position in the storage to start writing at.</param>
+    /// <param name="data">The data to write.</param>
+    /// <returns>A task that represents the asynchronous write operation.</returns>
+    Task WriteAsync(long position, ReadOnlyMemory<byte> data);
+
+    /// <summary>
     /// Flushes any buffered data to the underlying storage.
     /// </summary>
     /// <returns>A task that represents the asynchronous flush operation.</returns>
@@ -136,11 +144,4 @@ public interface IRecoveryManager
     /// </summary>
     /// <returns>A task that represents the asynchronous operation. The task result indicates whether recovery is needed.</returns>
     Task<bool> IsRecoveryNeededAsync();
-
-/* Unmerged change from project 'Kvs.Core(net8.0)'
-Before:
-}
-After:
-}
-*/
 }

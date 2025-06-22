@@ -48,7 +48,8 @@ public readonly struct TransactionLogEntry(
     long pageId,
     ReadOnlyMemory<byte> beforeImage,
     ReadOnlyMemory<byte> afterImage,
-    DateTime timestamp)
+    DateTime timestamp,
+    uint checksum = 0)
 {
     /// <summary>
     /// Gets the log sequence number (LSN) uniquely identifying this entry.
@@ -86,14 +87,19 @@ public readonly struct TransactionLogEntry(
     public DateTime Timestamp { get; } = timestamp;
 
     /// <summary>
-    /// Gets the checksum for data integrity verification.
+    /// Gets the checksum value stored with the entry.
     /// </summary>
-    public uint Checksum { get; } = CalculateChecksum(lsn, transactionId, operationType, pageId, beforeImage, afterImage);
+    public uint Checksum { get; } = checksum == 0 ? CalculateChecksum(lsn, transactionId, operationType, pageId, beforeImage, afterImage) : checksum;
+
+    /// <summary>
+    /// Gets the checksum calculated from the current field values.
+    /// </summary>
+    public uint ComputedChecksum { get; } = CalculateChecksum(lsn, transactionId, operationType, pageId, beforeImage, afterImage);
 
     /// <summary>
     /// Gets a value indicating whether this entry is valid based on checksum verification.
     /// </summary>
-    public bool IsValid => this.Checksum == CalculateChecksum(this.Lsn, this.TransactionId, this.OperationType, this.PageId, this.BeforeImage, this.AfterImage);
+    public bool IsValid => this.Checksum == this.ComputedChecksum;
 
     private static uint CalculateChecksum(
         long lsn,
@@ -148,11 +154,4 @@ public readonly struct TransactionLogEntry(
 
         return checksum;
     }
-
-/* Unmerged change from project 'Kvs.Core(net8.0)'
-Before:
-}
-After:
-}
-*/
 }

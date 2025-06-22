@@ -325,11 +325,4 @@ public class RecoveryManager(ITransactionLog transactionLog, IPageManager pageMa
             // Log error but continue with recovery
         }
     }
-
-/* Unmerged change from project 'Kvs.Core(net8.0)'
-Before:
-}
-After:
-}
-*/
 }
