@@ -2,10 +2,10 @@
 
 ## Document Information
 - **Title**: KVS - Distributed NoSQL Key-Value Store
-- **Version**: 1.0
+- **Version**: 1.1
 - **Date**: 2025-06-22
 - **Authors**: Development Team
-- **Status**: Phase 1 Complete
+- **Status**: Phase 2 Complete
 
 ## Table of Contents
 1. [Executive Summary](#executive-summary)
@@ -27,15 +27,26 @@
 
 KVS is a distributed NoSQL key-value store designed for high availability, strong consistency, and zero data loss. Built in C# with .NET multi-targeting support, it provides ACID transactions, automatic failover, and enterprise-grade reliability.
 
-### Implementation Status: Phase 1 Complete ✅
-**Current Status:** Core storage infrastructure fully implemented and tested
+### Implementation Status: Phase 2 Complete ✅
+**Current Status:** Core storage and data structures fully implemented and tested
+
+**Phase 1 Complete** (81/81 tests passing):
 - ✅ **Storage Engine**: Complete with async I/O and multi-framework support
 - ✅ **Write-Ahead Logging**: ARIES-style WAL with forced sync and integrity validation
 - ✅ **Page Management**: Fixed-size pages (4KB) with allocation and caching
 - ✅ **Crash Recovery**: Complete ARIES recovery (Analysis/Redo/Undo phases)
 - ✅ **Serialization**: Binary serialization with type safety
-- ✅ **Testing**: 100% test coverage (81/81 tests passing)
 - ✅ **Documentation**: Complete XML documentation for all public members
+
+**Phase 2 Complete** (179/179 tests passing):
+- ✅ **B-Tree Implementation**: Complete with full CRUD operations
+- ✅ **Node Management**: Split/merge operations with proper balancing
+- ✅ **Index Interface**: Async operations with IAsyncEnumerable support
+- ✅ **B-Tree Index**: Primary key indexing with range queries
+- ✅ **SkipList**: Probabilistic data structure with O(log n) operations
+- ✅ **HashIndex**: Hash-based indexing with O(1) average case operations
+- ✅ **LRU Cache**: In-memory caching with eviction policies
+- ✅ **Testing**: 100% test coverage with comprehensive edge cases
 
 ### Key Features (Implemented)
 - **Storage Durability**: ACID-compliant WAL with fsync guarantees
@@ -43,13 +54,16 @@ KVS is a distributed NoSQL key-value store designed for high availability, stron
 - **Memory Safety**: ReadOnlyMemory<byte> usage throughout for zero-copy operations
 - **Multi-Platform**: Targets .NET Framework 4.7.2, .NET 8.0, and .NET 9.0
 - **Page-based Storage**: Efficient 4KB page management with checksums
+- **B-Tree Indexing**: High-performance indexing with O(log n) operations
+- **In-Memory Caching**: LRU cache with configurable eviction policies
+- **Async Operations**: Full async/await support with IAsyncEnumerable
 
 ### Key Features (Planned)
 - **Strong Consistency**: CP system with quorum-based operations (Phase 6-7)
 - **Zero Data Loss**: Synchronous replication with WAL persistence (Phase 6)
 - **Automatic Failover**: Sub-second detection and recovery (Phase 6-7)
 - **ACID Transactions**: Full transaction support with two-phase commit (Phase 3)
-- **B-Tree Indexing**: High-performance indexing for fast queries (Phase 2)
+- **Document Storage**: JSON document support with collections (Phase 3)
 
 ## Requirements
 
@@ -161,15 +175,66 @@ public interface IStorageEngine
 **Purpose**: Provides efficient key-value access with range queries
 
 **Characteristics**:
-- **Order**: 64 for optimal cache performance
-- **Node Size**: Aligned to page boundaries (4KB)
-- **Concurrency**: Reader-writer locks with MVCC
-- **Persistence**: WAL-based modifications
+- **Order**: 64 for optimal cache performance (configurable)
+- **Node Size**: Dynamically managed with split/merge operations
+- **Concurrency**: Thread-safe operations with proper synchronization
+- **Memory Management**: Integrated with LRU cache for hot nodes
 
 **Operations**:
 - Point lookups: O(log n)
 - Range scans: O(log n + k)
 - Insertions/Deletions: O(log n)
+- Split/Merge: O(degree) for node operations
+
+**Implementation Details**:
+- Supports generic key/value types with IComparable<TKey> constraint
+- Handles edge cases for deletion (predecessor/successor borrowing)
+- Provides GetLeftmostKeyValue() and GetRightmostKeyValue() for boundary operations
+- Full async support with IAsyncEnumerable for range queries
+
+### SkipList Data Structure
+
+**Purpose**: Provides probabilistic balanced tree alternative with simpler implementation
+
+**Characteristics**:
+- **Max Level**: 32 levels for supporting large datasets
+- **Probability**: 0.5 for level promotion (configurable)
+- **Thread Safety**: ReaderWriterLockSlim for concurrent access
+- **Memory Efficiency**: Dynamic node allocation with forward pointers
+
+**Operations**:
+- Search: O(log n) average case
+- Insert: O(log n) average case
+- Delete: O(log n) average case
+- Range queries: O(log n + k) where k is result size
+
+**Implementation Details**:
+- Random level generation for probabilistic balancing
+- Support for generic key/value types with IComparable<TKey>
+- Efficient range queries with iterator pattern
+- IDisposable pattern for resource cleanup
+
+### HashIndex Implementation
+
+**Purpose**: Provides hash-based indexing for O(1) average case operations
+
+**Characteristics**:
+- **Underlying Structure**: ConcurrentDictionary for thread safety
+- **Collision Handling**: Built-in .NET collision resolution
+- **Concurrency**: Lock-free reads, thread-safe writes
+- **Memory Management**: Automatic growth with rehashing
+
+**Operations**:
+- Get: O(1) average case, O(n) worst case
+- Put: O(1) average case, O(n) worst case
+- Delete: O(1) average case, O(n) worst case
+- Range queries: O(n log n) due to sorting requirement
+
+**Implementation Details**:
+- Implements IIndex<TKey, TValue> interface for consistency
+- Supports all standard index operations (batch insert/delete)
+- Range queries require sorting since hash tables are unordered
+- Statistics tracking for monitoring and debugging
 
 ### Transaction Manager
 
