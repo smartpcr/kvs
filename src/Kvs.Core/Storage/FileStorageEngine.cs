@@ -34,7 +34,7 @@ namespace Kvs.Core.Storage
                 this.filePath,
                 FileMode.OpenOrCreate,
                 FileAccess.ReadWrite,
-                FileShare.Read,
+                FileShare.ReadWrite,
                 bufferSize: 4096,
                 useAsync: true);
 
