@@ -148,11 +148,4 @@ public readonly struct TransactionLogEntry(
 
         return checksum;
     }
-
-/* Unmerged change from project 'Kvs.Core(net8.0)'
-Before:
-}
-After:
-}
-*/
 }

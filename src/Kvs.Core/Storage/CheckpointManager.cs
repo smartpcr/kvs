@@ -229,11 +229,4 @@ public class CheckpointManager : ICheckpointManager
         this.checkpointTimer?.Dispose();
         this.checkpointSemaphore?.Dispose();
     }
-
-/* Unmerged change from project 'Kvs.Core(net8.0)'
-Before:
-}
-After:
-}
-*/
 }

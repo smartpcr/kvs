@@ -59,11 +59,4 @@ public interface IAsyncSerializer
     /// <param name="data">The serialized binary data.</param>
     /// <returns>A task that represents the asynchronous operation. The task result contains the <see cref="Type"/> of the serialized object.</returns>
     Task<Type> GetSerializedTypeAsync(ReadOnlyMemory<byte> data);
-
-/* Unmerged change from project 'Kvs.Core(net8.0)'
-Before:
-}
-After:
-}
-*/
 }
