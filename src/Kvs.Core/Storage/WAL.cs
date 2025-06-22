@@ -171,6 +171,10 @@ public class WAL(IStorageEngine storageEngine, ISerializer serializer) : ITransa
                 DateTime.UtcNow);
 
             await this.WriteEntryInternal(checkpointEntry);
+
+            // Ensure the checkpoint entry is durable on disk
+            await this.storageEngine.FlushAsync();
+            await this.storageEngine.FsyncAsync();
         }
         finally
         {
