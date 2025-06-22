@@ -133,7 +133,7 @@ public class PageManager(IStorageEngine storageEngine, int pageSize = Page.Defau
         this.ThrowIfDisposed();
 
         var position = page.PageId * this.pageSize;
-        await this.storageEngine.WriteAsync(page.BufferMemory);
+        await this.storageEngine.WriteAsync(position, page.BufferMemory);
 
         // Update cache
 #if NET472
@@ -161,7 +161,7 @@ public class PageManager(IStorageEngine storageEngine, int pageSize = Page.Defau
         // Clear the page on disk
         var emptyPage = new Page(pageId, PageType.Free, this.pageSize);
         var position = pageId * this.pageSize;
-        await this.storageEngine.WriteAsync(emptyPage.BufferMemory);
+        await this.storageEngine.WriteAsync(position, emptyPage.BufferMemory);
 
         // Remove from cache after writing to disk
         this.pageCache.TryRemove(pageId, out _);
@@ -220,7 +220,7 @@ public class PageManager(IStorageEngine storageEngine, int pageSize = Page.Defau
             var tasks = this.pageCache.Values.Select(async page =>
             {
                 var position = page.PageId * this.pageSize;
-                await this.storageEngine.WriteAsync(page.BufferMemory);
+                await this.storageEngine.WriteAsync(position, page.BufferMemory);
             });
 
             await Task.WhenAll(tasks);
