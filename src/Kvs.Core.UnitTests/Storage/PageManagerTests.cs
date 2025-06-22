@@ -65,6 +65,21 @@ public class PageManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task WritePageAsync_ShouldWriteToCorrectPosition()
+    {
+        var page = await this.pageManager.AllocatePageAsync(PageType.Data);
+        var testData = new byte[] { 10, 20, 30 };
+        page.WriteData(testData);
+
+        await this.pageManager.WritePageAsync(page);
+
+        var expectedPosition = page.PageId * Page.DefaultPageSize;
+        var raw = await this.storageEngine.ReadAsync(expectedPosition, Page.DefaultPageSize);
+
+        raw.ToArray().Should().BeEquivalentTo(page.BufferMemory.ToArray());
+    }
+
+    [Fact]
     public async Task WritePageAsync_ShouldComplete_WithoutException()
     {
         var page = await this.pageManager.AllocatePageAsync(PageType.Data);
@@ -85,6 +100,21 @@ public class PageManagerTests : IDisposable
 
         var pageExists = await this.pageManager.PageExistsAsync(originalPageId);
         pageExists.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task FreePageAsync_ShouldPersistFreePageAtCorrectPosition()
+    {
+        var page = await this.pageManager.AllocatePageAsync(PageType.Data);
+        var pageId = page.PageId;
+
+        await this.pageManager.FreePageAsync(pageId);
+
+        var position = pageId * Page.DefaultPageSize;
+        var data = await this.storageEngine.ReadAsync(position, Page.DefaultPageSize);
+        var readPage = new Page(data.Span);
+
+        readPage.PageType.Should().Be(PageType.Free);
     }
 
     [Fact]
@@ -111,6 +141,24 @@ public class PageManagerTests : IDisposable
         var act = async () => await this.pageManager.FlushAsync();
 
         await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task FlushAsync_ShouldWriteCachedPagesToCorrectPositions()
+    {
+        var page1 = await this.pageManager.AllocatePageAsync(PageType.Data);
+        var page2 = await this.pageManager.AllocatePageAsync(PageType.Data);
+
+        page1.WriteData(new byte[] { 0x11, 0x22 });
+        page2.WriteData(new byte[] { 0x33, 0x44 });
+
+        await this.pageManager.FlushAsync();
+
+        var data1 = await this.storageEngine.ReadAsync(page1.PageId * Page.DefaultPageSize, Page.DefaultPageSize);
+        var data2 = await this.storageEngine.ReadAsync(page2.PageId * Page.DefaultPageSize, Page.DefaultPageSize);
+
+        data1.ToArray().Should().BeEquivalentTo(page1.BufferMemory.ToArray());
+        data2.ToArray().Should().BeEquivalentTo(page2.BufferMemory.ToArray());
     }
 
     [Fact]
