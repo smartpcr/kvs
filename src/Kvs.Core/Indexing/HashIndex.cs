@@ -16,6 +16,8 @@ public class HashIndex<TKey, TValue> : IIndex<TKey, TValue>
 {
     private readonly ConcurrentDictionary<TKey, TValue> index;
     private readonly object disposeLock = new object();
+    private readonly int concurrencyLevel;
+    private readonly int capacity;
     private bool disposed;
 
     /// <summary>
@@ -23,7 +25,9 @@ public class HashIndex<TKey, TValue> : IIndex<TKey, TValue>
     /// </summary>
     public HashIndex()
     {
-        this.index = new ConcurrentDictionary<TKey, TValue>();
+        this.concurrencyLevel = Environment.ProcessorCount;
+        this.capacity = 31;
+        this.index = new ConcurrentDictionary<TKey, TValue>(this.concurrencyLevel, this.capacity);
     }
 
     /// <summary>
@@ -33,6 +37,8 @@ public class HashIndex<TKey, TValue> : IIndex<TKey, TValue>
     /// <param name="capacity">The initial number of elements that the index can contain.</param>
     public HashIndex(int concurrencyLevel, int capacity)
     {
+        this.concurrencyLevel = concurrencyLevel;
+        this.capacity = capacity;
         this.index = new ConcurrentDictionary<TKey, TValue>(concurrencyLevel, capacity);
     }
 
@@ -372,7 +378,8 @@ public class HashIndex<TKey, TValue> : IIndex<TKey, TValue>
             ["MinKey"] = this.index.IsEmpty ? "N/A" : this.index.Keys.Min()?.ToString() ?? "null",
             ["MaxKey"] = this.index.IsEmpty ? "N/A" : this.index.Keys.Max()?.ToString() ?? "null",
             ["Type"] = "HashIndex",
-            ["ConcurrencyLevel"] = Environment.ProcessorCount // Approximate
+            ["ConcurrencyLevel"] = this.concurrencyLevel,
+            ["Capacity"] = this.capacity
         };
     }
 

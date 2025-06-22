@@ -472,6 +472,7 @@ public class HashIndexTests
         stats["MinKey"].Should().Be("1");
         stats["MaxKey"].Should().Be("5");
         stats["Type"].Should().Be("HashIndex");
+        stats["ConcurrencyLevel"].Should().Be(Environment.ProcessorCount);
     }
 
     [Fact]
