@@ -536,4 +536,46 @@ public class BTreeIndexTests
         var count = await index.CountAsync();
         count.Should().Be(100);
     }
+
+    [Fact]
+    public async Task GetAllAsync_LargeData_ShouldNotAllocateExcessiveMemory()
+    {
+        var index = new BTreeIndex<int, int>();
+        for (int i = 0; i < 10000; i++)
+        {
+            await index.PutAsync(i, i);
+        }
+
+        var before = GC.GetTotalMemory(true);
+
+        await foreach (var item in index.GetAllAsync())
+        {
+            _ = item;
+        }
+
+        var after = GC.GetTotalMemory(true);
+
+        (after - before).Should().BeLessThan(1024 * 1024);
+    }
+
+    [Fact]
+    public async Task RangeAsync_LargeData_ShouldNotAllocateExcessiveMemory()
+    {
+        var index = new BTreeIndex<int, int>();
+        for (int i = 0; i < 10000; i++)
+        {
+            await index.PutAsync(i, i);
+        }
+
+        var before = GC.GetTotalMemory(true);
+
+        await foreach (var item in index.RangeAsync(1000, 9000))
+        {
+            _ = item;
+        }
+
+        var after = GC.GetTotalMemory(true);
+
+        (after - before).Should().BeLessThan(1024 * 1024);
+    }
 }

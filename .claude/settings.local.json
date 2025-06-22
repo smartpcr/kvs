@@ -21,7 +21,8 @@
       "Bash(grep:*)",
       "Bash(dotnet run:*)",
       "Bash(dotnet script:*)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": []
   }

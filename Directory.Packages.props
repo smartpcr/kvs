@@ -24,7 +24,7 @@
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="8.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Options" Version="8.0.0" />
-    <PackageVersion Include="System.Text.Json" Version="8.0.0" />
+    <PackageVersion Include="System.Text.Json" Version="8.0.5" />
     
     <!-- For .NET Framework compatibility -->
     <PackageVersion Include="System.Memory" Version="4.5.5" />
