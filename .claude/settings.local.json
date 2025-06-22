@@ -9,7 +9,19 @@
       "Bash(dotnet clean:*)",
       "WebFetch(domain:betterprogramming.pub)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(find:*)",
+      "Bash(dotnet build:*)",
+      "Bash(rm:*)",
+      "Bash(dotnet format)",
+      "Bash(dotnet format:*)",
+      "Bash(rg:*)",
+      "Bash(ls:*)",
+      "Bash(mv:*)",
+      "Bash(grep:*)",
+      "Bash(dotnet run:*)",
+      "Bash(dotnet script:*)",
+      "Bash(cp:*)"
     ],
     "deny": []
   }

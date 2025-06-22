@@ -2,13 +2,13 @@
 
   <PropertyGroup>
     <TargetFrameworks>net472;net8.0;net9.0</TargetFrameworks>
-    <AssemblyName>Kvs</AssemblyName>
-    <RootNamespace>Kvs</RootNamespace>
-    <PackageId>Kvs</PackageId>
-    <Description>A simple key-value store library</Description>
-    <PackageTags>kvs;key-value;store;database</PackageTags>
+    <LangVersion>12.0</LangVersion>
+    <AssemblyName>Kvs.Core</AssemblyName>
+    <RootNamespace>Kvs.Core</RootNamespace>
+    <PackageId>Kvs.Core</PackageId>
+    <Description>Core storage engine and data structures for KVS NoSQL database</Description>
+    <PackageTags>kvs;nosql;storage;btree;wal</PackageTags>
   </PropertyGroup>
-
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
     <PackageReference Include="System.Memory" />

@@ -147,9 +147,9 @@ dotnet_naming_rule.non_field_members_should_be_pascal_case.severity = warning
 dotnet_naming_rule.non_field_members_should_be_pascal_case.symbols = non_field_members
 dotnet_naming_rule.non_field_members_should_be_pascal_case.style = pascal_case
 
-dotnet_naming_rule.private_or_internal_field_should_be_begins_with_underscore.severity = warning
-dotnet_naming_rule.private_or_internal_field_should_be_begins_with_underscore.symbols = private_or_internal_field
-dotnet_naming_rule.private_or_internal_field_should_be_begins_with_underscore.style = begins_with_underscore
+dotnet_naming_rule.private_or_internal_field_should_be_camel_case.severity = warning
+dotnet_naming_rule.private_or_internal_field_should_be_camel_case.symbols = private_or_internal_field
+dotnet_naming_rule.private_or_internal_field_should_be_camel_case.style = camel_case
 
 dotnet_naming_rule.constant_should_be_pascal_case.severity = warning
 dotnet_naming_rule.constant_should_be_pascal_case.symbols = constant
@@ -192,6 +192,11 @@ dotnet_naming_style.begins_with_underscore.required_suffix =
 dotnet_naming_style.begins_with_underscore.word_separator = 
 dotnet_naming_style.begins_with_underscore.capitalization = camel_case
 
+dotnet_naming_style.camel_case.required_prefix = 
+dotnet_naming_style.camel_case.required_suffix = 
+dotnet_naming_style.camel_case.word_separator = 
+dotnet_naming_style.camel_case.capitalization = camel_case
+
 # .NET code style settings
 dotnet_style_operator_placement_when_wrapping = beginning_of_line
 dotnet_style_coalesce_expression = true:suggestion
@@ -221,10 +226,10 @@ dotnet_style_parentheses_in_arithmetic_binary_operators = always_for_clarity:sug
 dotnet_style_parentheses_in_other_binary_operators = always_for_clarity:suggestion
 dotnet_style_parentheses_in_relational_binary_operators = always_for_clarity:suggestion
 dotnet_style_parentheses_in_other_operators = never_if_unnecessary:suggestion
-dotnet_style_qualification_for_field = false:warning
-dotnet_style_qualification_for_property = false:warning
-dotnet_style_qualification_for_method = false:warning
-dotnet_style_qualification_for_event = false:warning
+dotnet_style_qualification_for_field = true:warning
+dotnet_style_qualification_for_property = true:warning
+dotnet_style_qualification_for_method = true:warning
+dotnet_style_qualification_for_event = true:warning
 
 # Analyzer settings
 dotnet_diagnostic.CA1031.severity = suggestion
@@ -235,8 +240,48 @@ dotnet_diagnostic.CA1720.severity = none
 dotnet_diagnostic.CA2007.severity = none
 
 # StyleCop settings
-dotnet_diagnostic.SA1101.severity = none
+dotnet_diagnostic.SA1101.severity = warning
+dotnet_diagnostic.SA1108.severity = none
+dotnet_diagnostic.SA1119.severity = none
 dotnet_diagnostic.SA1200.severity = none
+dotnet_diagnostic.SA1201.severity = none
+dotnet_diagnostic.SA1202.severity = none
+dotnet_diagnostic.SA1203.severity = none
+dotnet_diagnostic.SA1214.severity = none
 dotnet_diagnostic.SA1309.severity = none
+dotnet_diagnostic.SA1316.severity = none
+dotnet_diagnostic.SA1402.severity = none
 dotnet_diagnostic.SA1413.severity = none
+dotnet_diagnostic.SA1600.severity = warning
+dotnet_diagnostic.SA1602.severity = none
 dotnet_diagnostic.SA1633.severity = none
+dotnet_diagnostic.SA1649.severity = none
+
+# Sonar settings
+dotnet_diagnostic.S101.severity = none
+dotnet_diagnostic.S125.severity = none
+dotnet_diagnostic.S1117.severity = none
+dotnet_diagnostic.S1144.severity = none
+dotnet_diagnostic.S1450.severity = none
+dotnet_diagnostic.S1481.severity = none
+dotnet_diagnostic.S3881.severity = none
+dotnet_diagnostic.S4487.severity = none
+
+# StyleCop additional settings
+dotnet_diagnostic.SA1518.severity = none
+
+# IDE settings
+dotnet_diagnostic.IDE0052.severity = none
+
+# Test project specific settings - disable documentation requirements
+[**/tests/**/*.cs]
+dotnet_diagnostic.SA1600.severity = none
+
+[**/*Tests.cs]
+dotnet_diagnostic.SA1600.severity = none
+
+[**/*Test.cs]
+dotnet_diagnostic.SA1600.severity = none
+
+[**/UnitTests/**/*.cs]
+dotnet_diagnostic.SA1600.severity = none

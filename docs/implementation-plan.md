@@ -55,12 +55,28 @@ Build a lightweight NoSQL key-value store database in C# with document storage c
 - [ ] Create checkpoint mechanism for WAL compaction
 - [ ] Implement crash recovery from WAL replay
 
+**Phase 1 Tests:**
+- [ ] `StorageEngineTests` - Basic read/write operations
+- [ ] `PageTests` - Page structure and operations
+- [ ] `PageManagerTests` - Page allocation/deallocation
+- [ ] `SerializationTests` - Binary serialization/deserialization
+- [ ] `WALTests` - Write-ahead log operations and persistence
+- [ ] `CheckpointTests` - WAL compaction and checkpoint creation
+- [ ] `RecoveryTests` - Crash recovery and WAL replay
+
 ### Phase 2: Data Structures (Week 2)
 - [ ] Implement `BTree<TKey, TValue>` class
 - [ ] Create `Node` class for B-Tree nodes
 - [ ] Add `IIndex` interface
 - [ ] Implement `BTreeIndex` for primary key indexing
 - [ ] Add in-memory `LRUCache<TKey, TValue>`
+
+**Phase 2 Tests:**
+- [ ] `BTreeTests` - B-Tree insertion, deletion, search operations
+- [ ] `NodeTests` - B-Tree node splitting and merging
+- [ ] `IndexTests` - Index interface operations
+- [ ] `BTreeIndexTests` - Primary key indexing functionality
+- [ ] `LRUCacheTests` - Cache eviction and memory management
 
 ### Phase 3: Database Core (Week 3)
 - [ ] Create `Database` class as main entry point
@@ -72,12 +88,31 @@ Build a lightweight NoSQL key-value store database in C# with document storage c
 - [ ] Implement deadlock detection and resolution
 - [ ] Add transaction timeout and abort mechanisms
 
+**Phase 3 Tests:**
+- [ ] `DatabaseTests` - Database lifecycle and collection management
+- [ ] `CollectionTests` - Document storage and retrieval
+- [ ] `DocumentTests` - JSON document handling and validation
+- [ ] `TransactionTests` - ACID properties and transaction lifecycle
+- [ ] `TwoPhaseCommitTests` - Distributed transaction coordination
+- [ ] `IsolationTests` - Transaction isolation level verification
+- [ ] `DeadlockTests` - Deadlock detection and resolution
+- [ ] `TransactionTimeoutTests` - Timeout and abort mechanisms
+
 ### Phase 4: Query Engine (Week 4)
 - [ ] Define `Query` class with JSON syntax
 - [ ] Implement `QueryParser` 
 - [ ] Create `QueryExecutor` 
 - [ ] Add support for filters, sorting, pagination
 - [ ] Implement basic aggregations
+
+**Phase 4 Tests:**
+- [ ] `QueryTests` - JSON query syntax validation
+- [ ] `QueryParserTests` - Query parsing and validation
+- [ ] `QueryExecutorTests` - Query execution and optimization
+- [ ] `FilterTests` - Filter operations and logic
+- [ ] `SortingTests` - Sorting algorithms and performance
+- [ ] `PaginationTests` - Pagination logic and efficiency
+- [ ] `AggregationTests` - Basic aggregation operations
 
 ### Phase 5: Concurrency & Performance (Week 5)
 - [ ] Add `ReaderWriterLockSlim` for thread safety
@@ -91,6 +126,18 @@ Build a lightweight NoSQL key-value store database in C# with document storage c
 - [ ] Add chaos engineering tests
 - [ ] Performance profiling and optimization
 
+**Phase 5 Tests:**
+- [ ] `ConcurrencyTests` - Thread safety and locking mechanisms
+- [ ] `ConnectionPoolTests` - Connection pooling and resource management
+- [ ] `AsyncTests` - Async/await pattern validation
+- [ ] `BenchmarkTests` - Performance baseline measurements
+- [ ] `HotPathTests` - Critical path optimization verification
+- [ ] `MonitoringTests` - Performance monitoring accuracy
+- [ ] `StressTests` - High-load and endurance testing
+- [ ] `ParallelTests` - Parallel execution correctness
+- [ ] `ChaosTests` - Failure injection and recovery
+- [ ] `ProfilingTests` - Performance profiling validation
+
 ### Phase 6: Clustering & Replication (Week 6)
 - [ ] Implement `IClusterManager` interface
 - [ ] Create `RaftConsensus` implementation
@@ -102,6 +149,17 @@ Build a lightweight NoSQL key-value store database in C# with document storage c
 - [ ] Add distributed WAL replication
 - [ ] Create cross-node transaction coordination
 
+**Phase 6 Tests:**
+- [ ] `ClusterManagerTests` - Cluster membership and management
+- [ ] `RaftConsensusTests` - Raft algorithm implementation
+- [ ] `NodeRegistryTests` - Node discovery and registration
+- [ ] `ReplicationManagerTests` - Data synchronization and consistency
+- [ ] `HealthMonitorTests` - Node health monitoring and detection
+- [ ] `FailoverManagerTests` - Automatic failover mechanisms
+- [ ] `QuorumTests` - Quorum-based operation validation
+- [ ] `DistributedWALTests` - Distributed WAL replication
+- [ ] `CrossNodeTransactionTests` - Multi-node transaction coordination
+
 ### Phase 7: High Availability (Week 7)
 - [ ] Implement leader election protocols
 - [ ] Add conflict resolution for concurrent writes
@@ -109,6 +167,15 @@ Build a lightweight NoSQL key-value store database in C# with document storage c
 - [ ] Implement split-brain detection and prevention
 - [ ] Add network partition tolerance
 - [ ] Create data consistency validation
+
+**Phase 7 Tests:**
+- [ ] `LeaderElectionTests` - Leader election algorithm verification
+- [ ] `ConflictResolutionTests` - Concurrent write conflict handling
+- [ ] `QuorumOperationTests` - Quorum-based read/write operations
+- [ ] `SplitBrainTests` - Split-brain detection and prevention
+- [ ] `NetworkPartitionTests` - Network partition tolerance
+- [ ] `ConsistencyValidationTests` - Data consistency verification
+- [ ] `HighAvailabilityIntegrationTests` - End-to-end HA scenarios
 
 ## Project Structure
 
