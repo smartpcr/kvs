@@ -222,10 +222,10 @@ public class BinarySerializer : ISerializer
 
             var timestamp = DateTime.FromBinary(reader.ReadInt64());
 
-            // Skip the stored checksum - it will be recalculated
-            reader.ReadUInt32();
+            // Read the stored checksum
+            var checksum = reader.ReadUInt32();
 
-            var entry = new TransactionLogEntry(lsn, transactionId, operationType, pageId, beforeImage, afterImage, timestamp);
+            var entry = new TransactionLogEntry(lsn, transactionId, operationType, pageId, beforeImage, afterImage, timestamp, checksum);
             return (T)(object)entry;
         }
         else
