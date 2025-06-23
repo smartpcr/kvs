@@ -23,6 +23,7 @@ public class Database : IDatabase, ITransactionContext
     private readonly SemaphoreSlim transactionLock;
 #if NET8_0_OR_GREATER
     private IStorageEngine? storageEngine;
+    private IStorageEngine? walStorageEngine;
     private IPageManager? pageManager;
     private WAL? wal;
     private DatabaseWAL? databaseWal;
@@ -34,6 +35,7 @@ public class Database : IDatabase, ITransactionContext
     private VersionManager? versionManager;
 #else
     private IStorageEngine storageEngine;
+    private IStorageEngine walStorageEngine;
     private IPageManager pageManager;
     private WAL wal;
     private DatabaseWAL databaseWal;
@@ -95,9 +97,9 @@ public class Database : IDatabase, ITransactionContext
             this.pageManager = new PageManager(this.storageEngine);
 
             var walPath = System.IO.Path.ChangeExtension(this.path, ".wal");
-            var walStorageEngine = new FileStorageEngine(walPath);
+            this.walStorageEngine = new FileStorageEngine(walPath);
             var serializer = new Serialization.BinarySerializer();
-            this.wal = new WAL(walStorageEngine, serializer);
+            this.wal = new WAL(this.walStorageEngine, serializer);
             this.databaseWal = new DatabaseWAL(this.wal);
 
             this.recoveryManager = new RecoveryManager(this.wal, this.pageManager);
@@ -481,6 +483,9 @@ public class Database : IDatabase, ITransactionContext
 
         this.storageEngine?.Dispose();
         this.storageEngine = null;
+
+        this.walStorageEngine?.Dispose();
+        this.walStorageEngine = null;
 
         this.collections.Clear();
     }

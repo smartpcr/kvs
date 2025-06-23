@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Kvs.Core.Storage;
+using Kvs.Core.TestUtilities;
 using Xunit;
 
 namespace Kvs.Core.UnitTests.Storage;
@@ -124,9 +125,6 @@ public class StorageEngineTests : IDisposable
     public void Dispose()
     {
         this.storageEngine?.Dispose();
-        if (File.Exists(this.testFilePath))
-        {
-            File.Delete(this.testFilePath);
-        }
+        FileHelper.DeleteFileWithRetry(this.testFilePath);
     }
 }

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using FluentAssertions;
 using Kvs.Core.Serialization;
 using Kvs.Core.Storage;
+using Kvs.Core.TestUtilities;
 using Xunit;
 
 namespace Kvs.Core.UnitTests.Storage;
@@ -12,9 +13,9 @@ namespace Kvs.Core.UnitTests.Storage;
 public class WALTests : IDisposable
 {
     private readonly string testFilePath;
-    private readonly FileStorageEngine storageEngine;
+    private FileStorageEngine storageEngine;
     private readonly BinarySerializer serializer;
-    private readonly WAL wal;
+    private WAL wal;
 
     public WALTests()
     {
@@ -185,18 +186,26 @@ public class WALTests : IDisposable
         var lsn = await this.wal.WriteEntryAsync(entry);
         await this.wal.FlushAsync();
 
+        // Dispose WAL and storage engine to release file lock before corrupting
+        this.wal.Dispose();
+        this.storageEngine.Dispose();
+
         // Corrupt the checksum in the log file
         using (var stream = new FileStream(
                    this.testFilePath,
                    FileMode.Open,
                    FileAccess.ReadWrite,
-                   FileShare.ReadWrite))
+                   FileShare.None))
         {
             stream.Seek(-1, SeekOrigin.End);
             var current = stream.ReadByte();
             stream.Seek(-1, SeekOrigin.End);
             stream.WriteByte((byte)(current ^ 0xFF));
         }
+
+        // Recreate WAL to read corrupted data
+        this.storageEngine = new FileStorageEngine(this.testFilePath);
+        this.wal = new WAL(this.storageEngine, this.serializer);
 
         var entries = await this.wal.ReadEntriesAsync(lsn);
 
@@ -246,9 +255,6 @@ public class WALTests : IDisposable
     {
         this.wal?.Dispose();
         this.storageEngine?.Dispose();
-        if (File.Exists(this.testFilePath))
-        {
-            File.Delete(this.testFilePath);
-        }
+        FileHelper.DeleteFileWithRetry(this.testFilePath);
     }
 }

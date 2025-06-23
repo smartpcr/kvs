@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Kvs.Core.Database;
+using Kvs.Core.TestUtilities;
 using Xunit;
 
 namespace Kvs.Core.UnitTests.DatabaseTests;
@@ -349,16 +350,9 @@ public class CollectionTests : IDisposable
     {
         this.database?.Dispose();
 
-        if (File.Exists(this.testDbPath))
-        {
-            File.Delete(this.testDbPath);
-        }
-
+        FileHelper.DeleteFileWithRetry(this.testDbPath);
         var walPath = Path.ChangeExtension(this.testDbPath, ".wal");
-        if (File.Exists(walPath))
-        {
-            File.Delete(walPath);
-        }
+        FileHelper.DeleteFileWithRetry(walPath);
     }
 
     private class TestDocument

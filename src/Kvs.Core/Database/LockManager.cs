@@ -559,6 +559,14 @@ public class LockManager : ILockManager
             bool semaphoreReleased = false;
             try
             {
+                // If we already hold the read lock, return immediately
+                if (this.readLockHolders.Contains(transactionId))
+                {
+                    this.lockSemaphore.Release();
+                    semaphoreReleased = true;
+                    return true;
+                }
+
                 // Can acquire read lock if no write lock or if we hold the write lock
                 // AND there are no pending write/upgrade requests
                 if (this.writeLockHolder == null || this.writeLockHolder == transactionId)
