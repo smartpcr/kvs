@@ -22,7 +22,9 @@
       "Bash(dotnet run:*)",
       "Bash(dotnet script:*)",
       "Bash(cp:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(true)",
+      "Bash(sed:*)"
     ],
     "deny": []
   }

@@ -28,7 +28,7 @@ public class DatabaseTests : IDisposable
     /// Tests that OpenAsync creates a database file.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task OpenAsync_Should_Create_Database_File()
     {
         // Act
@@ -43,7 +43,7 @@ public class DatabaseTests : IDisposable
     /// Tests that CloseAsync closes the database.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task CloseAsync_Should_Close_Database()
     {
         // Arrange
@@ -60,7 +60,7 @@ public class DatabaseTests : IDisposable
     /// Tests that GetCollection returns a collection instance.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task GetCollection_Should_Return_Collection_Instance()
     {
         // Arrange
@@ -78,7 +78,7 @@ public class DatabaseTests : IDisposable
     /// Tests that GetCollection returns the same instance for the same name.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task GetCollection_Should_Return_Same_Instance_For_Same_Name()
     {
         // Arrange
@@ -96,7 +96,7 @@ public class DatabaseTests : IDisposable
     /// Tests that BeginTransactionAsync creates a transaction.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task BeginTransactionAsync_Should_Create_Transaction()
     {
         // Arrange
@@ -109,31 +109,31 @@ public class DatabaseTests : IDisposable
         transaction.Should().NotBeNull();
         transaction.Id.Should().NotBeNullOrEmpty();
         transaction.State.Should().Be(TransactionState.Active);
-        transaction.IsolationLevel.Should().Be(System.Data.IsolationLevel.Serializable);
+        transaction.IsolationLevel.Should().Be(IsolationLevel.Serializable);
     }
 
     /// <summary>
     /// Tests that BeginTransactionAsync with isolation level uses the specified level.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task BeginTransactionAsync_With_IsolationLevel_Should_Use_Specified_Level()
     {
         // Arrange
         await this.database.OpenAsync();
 
         // Act
-        using var transaction = await this.database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
+        using var transaction = await this.database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
 
         // Assert
-        transaction.IsolationLevel.Should().Be(System.Data.IsolationLevel.ReadCommitted);
+        transaction.IsolationLevel.Should().Be(IsolationLevel.ReadCommitted);
     }
 
     /// <summary>
     /// Tests that CheckpointAsync completes successfully.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task CheckpointAsync_Should_Complete_Successfully()
     {
         // Arrange
@@ -150,7 +150,7 @@ public class DatabaseTests : IDisposable
     /// Tests that RecoverAsync completes successfully.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task RecoverAsync_Should_Complete_Successfully()
     {
         // Arrange
@@ -166,7 +166,7 @@ public class DatabaseTests : IDisposable
     /// <summary>
     /// Tests that GetCollection without open throws.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public void GetCollection_Without_Open_Should_Throw()
     {
         // Act
@@ -181,7 +181,7 @@ public class DatabaseTests : IDisposable
     /// Tests that BeginTransactionAsync without open throws.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task BeginTransactionAsync_Without_Open_Should_Throw()
     {
         // Act
@@ -196,7 +196,7 @@ public class DatabaseTests : IDisposable
     /// Tests that multiple transactions have unique IDs.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task Multiple_Transactions_Should_Have_Unique_Ids()
     {
         // Arrange

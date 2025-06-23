@@ -45,7 +45,10 @@ public class LockManager : ILockManager
     /// <summary>
     /// Acquires a read lock on a resource for a transaction.
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <param name="transactionId">The ID of the transaction requesting the lock.</param>
+    /// <param name="resourceId">The ID of the resource to lock.</param>
+    /// <param name="timeout">The maximum time to wait for acquiring the lock.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task<bool> AcquireReadLockAsync(string transactionId, string resourceId, TimeSpan timeout)
     {
         this.ThrowIfDisposed();
@@ -60,7 +63,7 @@ public class LockManager : ILockManager
             throw new ArgumentException("Resource ID cannot be null or empty.", nameof(resourceId));
         }
 
-        var resourceLock = this.resourceLocks.GetOrAdd(resourceId, _ => new ResourceLock(resourceId));
+        var resourceLock = this.resourceLocks.GetOrAdd(resourceId, id => new ResourceLock(id));
 
         using (var cts = new CancellationTokenSource(timeout))
         {
@@ -83,7 +86,7 @@ public class LockManager : ILockManager
                     }
 
                     // Track the lock for this transaction
-                    var locks = this.transactionLocks.GetOrAdd(transactionId, _ => new HashSet<string>());
+                    var locks = this.transactionLocks.GetOrAdd(transactionId, id => new HashSet<string>());
                     lock (locks)
                     {
                         locks.Add(resourceId);
@@ -99,6 +102,7 @@ public class LockManager : ILockManager
                 {
                     await this.deadlockDetector.RemoveWaitForAsync(transactionId, resourceLock.WriteLockHolder).ConfigureAwait(false);
                 }
+
                 return false;
             }
         }
@@ -107,7 +111,10 @@ public class LockManager : ILockManager
     /// <summary>
     /// Acquires a write lock on a resource for a transaction.
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <param name="transactionId">The ID of the transaction requesting the lock.</param>
+    /// <param name="resourceId">The ID of the resource to lock.</param>
+    /// <param name="timeout">The maximum time to wait for acquiring the lock.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task<bool> AcquireWriteLockAsync(string transactionId, string resourceId, TimeSpan timeout)
     {
         this.ThrowIfDisposed();
@@ -122,7 +129,7 @@ public class LockManager : ILockManager
             throw new ArgumentException("Resource ID cannot be null or empty.", nameof(resourceId));
         }
 
-        var resourceLock = this.resourceLocks.GetOrAdd(resourceId, _ => new ResourceLock(resourceId));
+        var resourceLock = this.resourceLocks.GetOrAdd(resourceId, id => new ResourceLock(id));
 
         using (var cts = new CancellationTokenSource(timeout))
         {
@@ -146,7 +153,7 @@ public class LockManager : ILockManager
                     }
 
                     // Track the lock for this transaction
-                    var locks = this.transactionLocks.GetOrAdd(transactionId, _ => new HashSet<string>());
+                    var locks = this.transactionLocks.GetOrAdd(transactionId, id => new HashSet<string>());
                     lock (locks)
                     {
                         locks.Add(resourceId);
@@ -172,7 +179,9 @@ public class LockManager : ILockManager
     /// <summary>
     /// Releases a lock on a resource for a transaction.
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <param name="transactionId">The ID of the transaction releasing the lock.</param>
+    /// <param name="resourceId">The ID of the resource to unlock.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task ReleaseLockAsync(string transactionId, string resourceId)
     {
         this.ThrowIfDisposed();
@@ -205,11 +214,50 @@ public class LockManager : ILockManager
     /// <summary>
     /// Releases all locks held by a transaction.
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <param name="transactionId">The ID of the transaction whose locks should be released.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task ReleaseAllLocksAsync(string transactionId)
 
-/* Unmerged change from project 'Kvs.Core(net8.0)'
-Before:
+    /* Unmerged change from project 'Kvs.Core(net8.0)'
+    Before:
+        {
+            this.ThrowIfDisposed();
+
+            if (string.IsNullOrEmpty(transactionId))
+            {
+                throw new ArgumentException("Transaction ID cannot be null or empty.", nameof(transactionId));
+            }
+
+            if (this.transactionLocks.TryRemove(transactionId, out var locks))
+            {
+                var releaseTasks = new List<Task>();
+
+                lock (locks)
+                {
+                    foreach (var resourceId in locks)
+                    {
+                        if (this.resourceLocks.TryGetValue(resourceId, out var resourceLock))
+                        {
+                            releaseTasks.Add(resourceLock.ReleaseLockAsync(transactionId));
+                        }
+                    }
+                }
+
+                await Task.WhenAll(releaseTasks).ConfigureAwait(false);
+            }
+
+            // Remove transaction from deadlock detector
+            await this.deadlockDetector.RemoveTransactionAsync(transactionId).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Checks if a transaction holds a lock on a resource.
+        /// </summary>
+        public async Task<LockType> GetLockTypeAsync(string transactionId, string resourceId)
+        {
+    After:
+        {
+    */
     {
         this.ThrowIfDisposed();
 
@@ -221,7 +269,7 @@ Before:
         if (this.transactionLocks.TryRemove(transactionId, out var locks))
         {
             var releaseTasks = new List<Task>();
-            
+
             lock (locks)
             {
                 foreach (var resourceId in locks)
@@ -243,45 +291,9 @@ Before:
     /// <summary>
     /// Checks if a transaction holds a lock on a resource.
     /// </summary>
-    public async Task<LockType> GetLockTypeAsync(string transactionId, string resourceId)
-    {
-After:
-    {
-*/
-    {
-        this.ThrowIfDisposed();
-
-        if (string.IsNullOrEmpty(transactionId))
-        {
-            throw new ArgumentException("Transaction ID cannot be null or empty.", nameof(transactionId));
-        }
-
-        if (this.transactionLocks.TryRemove(transactionId, out var locks))
-        {
-            var releaseTasks = new List<Task>();
-
-            lock (locks)
-            {
-                foreach (var resourceId in locks)
-                {
-                    if (this.resourceLocks.TryGetValue(resourceId, out var resourceLock))
-                    {
-                        releaseTasks.Add(resourceLock.ReleaseLockAsync(transactionId));
-                    }
-                }
-            }
-
-            await Task.WhenAll(releaseTasks).ConfigureAwait(false);
-        }
-
-        // Remove transaction from deadlock detector
-        await this.deadlockDetector.RemoveTransactionAsync(transactionId).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Checks if a transaction holds a lock on a resource.
-    /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <param name="transactionId">The ID of the transaction to check.</param>
+    /// <param name="resourceId">The ID of the resource to check.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task<LockType> GetLockTypeAsync(string transactionId, string resourceId)
     {
         this.ThrowIfDisposed();
@@ -307,8 +319,10 @@ After:
     /// <summary>
     /// Upgrades a read lock to a write lock.
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <param name="transactionId">The ID of the transaction upgrading the lock.</param>
+    /// <param name="resourceId">The ID of the resource whose lock is being upgraded.</param>
+    /// <param name="timeout">The maximum time to wait for upgrading the lock.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task<bool> UpgradeLockAsync(string transactionId, string resourceId, TimeSpan timeout)
     {
         this.ThrowIfDisposed();
@@ -369,7 +383,8 @@ After:
     /// <summary>
     /// Gets the current lock status for a resource.
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <param name="resourceId">The ID of the resource to check.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task<LockStatus> GetLockStatusAsync(string resourceId)
     {
         this.ThrowIfDisposed();
@@ -399,6 +414,7 @@ After:
     /// <summary>
     /// Disposes the lock manager.
     /// </summary>
+    /// <param name="disposing">True if disposing managed resources; false otherwise.</param>
     protected virtual void Dispose(bool disposing)
     {
         if (!this.disposed)
@@ -418,6 +434,11 @@ After:
         }
     }
 
+    /// <summary>
+    /// Handles the deadlock detected event from the deadlock detector.
+    /// </summary>
+    /// <param name="sender">The source of the event.</param>
+    /// <param name="e">The deadlock event arguments containing affected transactions.</param>
 #if NET8_0_OR_GREATER
     private void OnDeadlockDetected(object? sender, DeadlockEventArgs e)
 #else
@@ -439,7 +460,7 @@ After:
     /// <summary>
     /// Represents a lock on a specific resource.
     /// </summary>
-    private class ResourceLock : IDisposable
+    private sealed class ResourceLock : IDisposable
     {
         private readonly string resourceId;
         private readonly SemaphoreSlim lockSemaphore;
@@ -649,8 +670,7 @@ After:
                 var status = new LockStatus
                 {
                     IsLocked = this.writeLockHolder != null || this.readLockHolders.Count > 0,
-                    LockType = this.writeLockHolder != null ? LockType.Write :
-                               this.readLockHolders.Count > 0 ? LockType.Read : LockType.None,
+                    LockType = this.GetLockTypeForStatus(),
                     ReadLockHolders = this.readLockHolders.ToArray(),
                     WriteLockHolder = this.writeLockHolder,
                     WaitingTransactions = this.waitQueue.Select(r => r.TransactionId).ToArray()
@@ -681,13 +701,32 @@ After:
             return holders.ToArray();
         }
 
+        private LockType GetLockTypeForStatus()
+        {
+            if (this.writeLockHolder != null)
+            {
+                return LockType.Write;
+            }
+
+            if (this.readLockHolders.Count > 0)
+            {
+                return LockType.Read;
+            }
+
+            return LockType.None;
+        }
+
         public void Dispose()
         {
             this.Dispose(true);
             GC.SuppressFinalize(this);
         }
 
-        protected virtual void Dispose(bool disposing)
+        /// <summary>
+        /// Disposes the resource lock.
+        /// </summary>
+        /// <param name="disposing">True if disposing managed resources; false otherwise.</param>
+        private void Dispose(bool disposing)
         {
             if (!this.disposed)
             {
@@ -707,7 +746,7 @@ After:
             }
         }
 
-        private class LockRequest
+        private sealed class LockRequest
         {
             public LockRequest(string transactionId, LockType lockType, TaskCompletionSource<bool> completionSource, bool isUpgrade = false)
             {

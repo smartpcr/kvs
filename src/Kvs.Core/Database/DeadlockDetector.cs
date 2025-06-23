@@ -93,6 +93,14 @@ public sealed class DeadlockDetector : IDisposable
 
             this.transactionStartTimes.TryAdd(waitingTransaction, DateTime.UtcNow);
             this.transactionStartTimes.TryAdd(holdingTransaction, DateTime.UtcNow);
+
+            // Check for deadlock immediately
+            var cycles = this.FindCycles();
+            foreach (var cycle in cycles)
+            {
+                var victim = this.SelectVictim(cycle);
+                this.OnDeadlockDetected(new DeadlockEventArgs(victim, cycle));
+            }
         }
         finally
         {

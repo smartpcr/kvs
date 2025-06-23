@@ -101,7 +101,7 @@ public class Database : IDatabase
             this.recoveryManager = new RecoveryManager(this.wal, this.pageManager);
             this.checkpointManager = new CheckpointManager(this.wal, this.pageManager);
 
-            this.deadlockDetector = new DeadlockDetector(TimeSpan.FromSeconds(5));
+            this.deadlockDetector = new DeadlockDetector(TimeSpan.FromMilliseconds(100));
             this.deadlockDetector.DeadlockDetected += this.OnDeadlockDetected;
 
             this.lockManager = new LockManager(this.deadlockDetector);
@@ -413,10 +413,15 @@ public class Database : IDatabase
     private async void OnDeadlockDetected(object sender, DeadlockEventArgs e)
 #endif
     {
+        // Abort the victim transaction
         if (this.TryGetTransaction(e.Victim, out var victimTransaction))
         {
+            // Mark as aborted before rollback to prevent further operations
             victimTransaction!.State = TransactionState.Aborted;
-            await victimTransaction.RollbackAsync().ConfigureAwait(false);
+            
+            // The transaction will detect it's been aborted and throw DeadlockException
+            // We don't need to call RollbackAsync here as it will be called when the
+            // transaction throws the exception
         }
     }
 
@@ -429,8 +434,12 @@ public class Database : IDatabase
         // The lock manager detected a deadlock - abort the victim transaction
         if (this.activeTransactions.TryGetValue(e.Victim, out var victimTransaction))
         {
+            // Mark as aborted before rollback to prevent further operations
             victimTransaction.State = TransactionState.Aborted;
-            await victimTransaction.RollbackAsync().ConfigureAwait(false);
+            
+            // The transaction will detect it's been aborted and throw DeadlockException
+            // We don't need to call RollbackAsync here as it will be called when the
+            // transaction throws the exception
         }
     }
 

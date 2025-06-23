@@ -39,7 +39,9 @@ public class TransactionCoordinator : ITransactionCoordinator
     /// <summary>
     /// Begins a distributed transaction.
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <param name="transactionId">The unique identifier for the transaction.</param>
+    /// <param name="participants">The array of participants in the distributed transaction.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task BeginTransactionAsync(string transactionId, ITransactionParticipant[] participants)
     {
         this.ThrowIfDisposed();
@@ -83,7 +85,8 @@ public class TransactionCoordinator : ITransactionCoordinator
     /// <summary>
     /// Prepares the transaction for commit (Phase 1 of 2PC).
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <param name="transactionId">The ID of the transaction to prepare.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task<bool> PrepareAsync(string transactionId)
     {
         this.ThrowIfDisposed();
@@ -124,7 +127,8 @@ public class TransactionCoordinator : ITransactionCoordinator
             var votes = await Task.WhenAll(prepareTasks).ConfigureAwait(false);
 
             // Check if all voted to commit
-            var allVotedCommit = votes.All(v => v);
+            var votesList = new List<bool>(votes);
+            var allVotedCommit = votesList.TrueForAll(v => v);
 
             if (allVotedCommit)
             {
@@ -160,7 +164,8 @@ public class TransactionCoordinator : ITransactionCoordinator
     /// <summary>
     /// Commits the transaction (Phase 2 of 2PC).
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <param name="transactionId">The ID of the transaction to commit.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task CommitAsync(string transactionId)
     {
         this.ThrowIfDisposed();
@@ -225,7 +230,8 @@ public class TransactionCoordinator : ITransactionCoordinator
     /// <summary>
     /// Aborts the transaction.
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <param name="transactionId">The ID of the transaction to abort.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task AbortAsync(string transactionId)
     {
         this.ThrowIfDisposed();
@@ -249,7 +255,8 @@ public class TransactionCoordinator : ITransactionCoordinator
     /// <summary>
     /// Gets the status of a transaction.
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <param name="transactionId">The ID of the transaction to check.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task<TransactionCoordinatorStatus> GetStatusAsync(string transactionId)
     {
         this.ThrowIfDisposed();
@@ -285,7 +292,7 @@ public class TransactionCoordinator : ITransactionCoordinator
     /// <summary>
     /// Recovers incomplete transactions after a failure.
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task RecoverAsync()
     {
         this.ThrowIfDisposed();
@@ -351,6 +358,7 @@ public class TransactionCoordinator : ITransactionCoordinator
     /// <summary>
     /// Disposes the transaction coordinator.
     /// </summary>
+    /// <param name="disposing">True if disposing managed resources; false otherwise.</param>
     protected virtual void Dispose(bool disposing)
     {
         if (!this.disposed)
@@ -365,6 +373,12 @@ public class TransactionCoordinator : ITransactionCoordinator
         }
     }
 
+    /// <summary>
+    /// Prepares a single participant for the transaction.
+    /// </summary>
+    /// <param name="transaction">The coordinated transaction.</param>
+    /// <param name="participant">The participant to prepare.</param>
+    /// <returns>True if the participant votes to commit; false otherwise.</returns>
     private async Task<bool> PrepareParticipantAsync(CoordinatedTransaction transaction, ITransactionParticipant participant)
     {
         try
@@ -383,19 +397,46 @@ public class TransactionCoordinator : ITransactionCoordinator
         }
     }
 
+    /// <summary>
+    /// Commits the transaction for a single participant.
+    /// </summary>
+    /// <param name="transaction">The coordinated transaction.</param>
+    /// <param name="participant">The participant to commit.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     private async Task CommitParticipantAsync(CoordinatedTransaction transaction, ITransactionParticipant participant)
     {
-        try
+        const int maxRetries = 3;
+        int retryCount = 0;
+
+        while (retryCount < maxRetries)
         {
-            await participant.CommitAsync(transaction.TransactionId).ConfigureAwait(false);
-        }
-        catch (Exception)
-        {
-            // Log error but continue - participant will need to recover
-            // In a real system, we would retry with exponential backoff
+            try
+            {
+                await participant.CommitAsync(transaction.TransactionId).ConfigureAwait(false);
+                return; // Success
+            }
+            catch (Exception)
+            {
+                retryCount++;
+                if (retryCount >= maxRetries)
+                {
+                    // Log error but continue - participant will need to recover
+                    // In a real system, we would retry with exponential backoff
+                    break;
+                }
+
+                // Wait before retry
+                await Task.Delay(100 * retryCount).ConfigureAwait(false);
+            }
         }
     }
 
+    /// <summary>
+    /// Aborts the transaction for a single participant.
+    /// </summary>
+    /// <param name="transaction">The coordinated transaction.</param>
+    /// <param name="participant">The participant to abort.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     private async Task AbortParticipantAsync(CoordinatedTransaction transaction, ITransactionParticipant participant)
     {
         try
@@ -408,6 +449,11 @@ public class TransactionCoordinator : ITransactionCoordinator
         }
     }
 
+    /// <summary>
+    /// Internal method to abort a transaction and notify all participants.
+    /// </summary>
+    /// <param name="transaction">The transaction to abort.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     private async Task AbortInternalAsync(CoordinatedTransaction transaction)
     {
         transaction.Phase = TransactionPhase.Aborting;
@@ -449,6 +495,11 @@ public class TransactionCoordinator : ITransactionCoordinator
         this.transactions.TryRemove(transaction.TransactionId, out _);
     }
 
+    /// <summary>
+    /// Recovers a transaction that had a commit decision but was not completed.
+    /// </summary>
+    /// <param name="transactionId">The ID of the transaction to recover.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     private async Task RecoverCommitAsync(string transactionId)
     {
         // In recovery, we don't have the participant list
@@ -464,6 +515,11 @@ public class TransactionCoordinator : ITransactionCoordinator
         await this.transactionLog.WriteEntryAsync(completedEntry).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Recovers a transaction by aborting it.
+    /// </summary>
+    /// <param name="transactionId">The ID of the transaction to abort.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
     private async Task RecoverAbortAsync(string transactionId)
     {
         // Log abort decision
@@ -498,7 +554,7 @@ public class TransactionCoordinator : ITransactionCoordinator
     /// <summary>
     /// Represents a coordinated transaction.
     /// </summary>
-    private class CoordinatedTransaction
+    private sealed class CoordinatedTransaction
     {
         public string TransactionId { get; set; } = string.Empty;
 

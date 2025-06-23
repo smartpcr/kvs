@@ -30,7 +30,7 @@ public class CollectionTests : IDisposable
     /// Tests that InsertAsync adds a document and returns an ID.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task InsertAsync_Should_Add_Document_And_Return_Id()
     {
         // Arrange
@@ -49,7 +49,7 @@ public class CollectionTests : IDisposable
     /// Tests that FindByIdAsync returns an inserted document.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task FindByIdAsync_Should_Return_Inserted_Document()
     {
         // Arrange
@@ -71,7 +71,7 @@ public class CollectionTests : IDisposable
     /// Tests that FindByIdAsync returns null for a non-existent ID.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task FindByIdAsync_Should_Return_Null_For_NonExistent_Id()
     {
         // Arrange
@@ -89,7 +89,7 @@ public class CollectionTests : IDisposable
     /// Tests that UpdateAsync updates an existing document.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task UpdateAsync_Should_Update_Existing_Document()
     {
         // Arrange
@@ -113,7 +113,7 @@ public class CollectionTests : IDisposable
     /// Tests that UpdateAsync returns false for a non-existent document.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task UpdateAsync_Should_Return_False_For_NonExistent_Document()
     {
         // Arrange
@@ -132,7 +132,7 @@ public class CollectionTests : IDisposable
     /// Tests that DeleteAsync removes a document.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task DeleteAsync_Should_Remove_Document()
     {
         // Arrange
@@ -154,7 +154,7 @@ public class CollectionTests : IDisposable
     /// Tests that DeleteAsync returns false for a non-existent document.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task DeleteAsync_Should_Return_False_For_NonExistent_Document()
     {
         // Arrange
@@ -172,7 +172,7 @@ public class CollectionTests : IDisposable
     /// Tests that InsertManyAsync adds multiple documents.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task InsertManyAsync_Should_Add_Multiple_Documents()
     {
         // Arrange
@@ -197,7 +197,7 @@ public class CollectionTests : IDisposable
     /// Tests that FindAllAsync returns all documents.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task FindAllAsync_Should_Return_All_Documents()
     {
         // Arrange
@@ -223,7 +223,7 @@ public class CollectionTests : IDisposable
     /// Tests that CountAsync returns the document count.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task CountAsync_Should_Return_Document_Count()
     {
         // Arrange
@@ -253,7 +253,7 @@ public class CollectionTests : IDisposable
     /// Tests that ClearAsync removes all documents.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task ClearAsync_Should_Remove_All_Documents()
     {
         // Arrange
@@ -282,7 +282,7 @@ public class CollectionTests : IDisposable
     /// Tests that CreateIndexAsync completes successfully.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task CreateIndexAsync_Should_Complete_Successfully()
     {
         // Arrange
@@ -301,7 +301,7 @@ public class CollectionTests : IDisposable
     /// Tests that DropIndexAsync completes successfully.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task DropIndexAsync_Should_Complete_Successfully()
     {
         // Arrange
@@ -320,7 +320,7 @@ public class CollectionTests : IDisposable
     /// Tests that collection works with Document type.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task Collection_Should_Work_With_Document_Type()
     {
         // Arrange

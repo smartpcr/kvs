@@ -1,7 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
 
-
 /* Unmerged change from project 'Kvs.Core(net8.0)'
 Before:
 namespace Kvs.Core.Storage

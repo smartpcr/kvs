@@ -29,7 +29,7 @@ public class TransactionTests : IDisposable
     /// Tests that transaction has unique ID.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task Transaction_Should_Have_Unique_Id()
     {
         // Arrange
@@ -47,7 +47,7 @@ public class TransactionTests : IDisposable
     /// Tests that transaction starts in active state.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task Transaction_Should_Start_In_Active_State()
     {
         // Arrange
@@ -64,7 +64,7 @@ public class TransactionTests : IDisposable
     /// Tests that CommitAsync changes state to committed.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task CommitAsync_Should_Change_State_To_Committed()
     {
         // Arrange
@@ -82,7 +82,7 @@ public class TransactionTests : IDisposable
     /// Tests that RollbackAsync changes state to aborted.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task RollbackAsync_Should_Change_State_To_Aborted()
     {
         // Arrange
@@ -100,7 +100,7 @@ public class TransactionTests : IDisposable
     /// Tests that WriteAsync and ReadAsync work within transaction.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task WriteAsync_And_ReadAsync_Should_Work_Within_Transaction()
     {
         // Arrange
@@ -120,7 +120,7 @@ public class TransactionTests : IDisposable
     /// Tests that DeleteAsync removes value.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task DeleteAsync_Should_Remove_Value()
     {
         // Arrange
@@ -140,24 +140,24 @@ public class TransactionTests : IDisposable
     /// Tests that transaction has isolation level.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task Transaction_Should_Have_Isolation_Level()
     {
         // Arrange
         await this.database.OpenAsync();
 
         // Act
-        using var transaction = await this.database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
+        using var transaction = await this.database.BeginTransactionAsync(Kvs.Core.Database.IsolationLevel.ReadCommitted);
 
         // Assert
-        transaction.IsolationLevel.Should().Be(IsolationLevel.ReadCommitted);
+        transaction.IsolationLevel.Should().Be(Kvs.Core.Database.IsolationLevel.ReadCommitted);
     }
 
     /// <summary>
     /// Tests that multiple commits are idempotent.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task Multiple_Commits_Should_Be_Idempotent()
     {
         // Arrange
@@ -176,7 +176,7 @@ public class TransactionTests : IDisposable
     /// Tests that operations after commit throw.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task Operations_After_Commit_Should_Throw()
     {
         // Arrange
@@ -195,7 +195,7 @@ public class TransactionTests : IDisposable
     /// Tests that operations after rollback throw.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task Operations_After_Rollback_Should_Throw()
     {
         // Arrange
@@ -214,7 +214,7 @@ public class TransactionTests : IDisposable
     /// Tests that dispose rolls back active transaction.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task Dispose_Should_Rollback_Active_Transaction()
     {
         // Arrange
@@ -233,7 +233,7 @@ public class TransactionTests : IDisposable
     /// Tests that multiple transactions have unique IDs.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task Multiple_Transactions_Should_Have_Unique_Ids()
     {
         // Arrange

@@ -15,7 +15,7 @@ public class DocumentTests
     /// <summary>
     /// Tests that constructor initializes with new GUID.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public void Constructor_Should_Initialize_With_New_Guid()
     {
         // Act
@@ -32,7 +32,7 @@ public class DocumentTests
     /// <summary>
     /// Tests that constructor with ID uses provided ID.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public void Constructor_With_Id_Should_Use_Provided_Id()
     {
         // Arrange
@@ -48,7 +48,7 @@ public class DocumentTests
     /// <summary>
     /// Tests that indexer sets and gets values.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public void Indexer_Should_Set_And_Get_Values()
     {
         // Arrange
@@ -68,7 +68,7 @@ public class DocumentTests
     /// <summary>
     /// Tests that indexer returns null for non-existent key.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public void Indexer_Should_Return_Null_For_NonExistent_Key()
     {
         // Arrange
@@ -85,7 +85,7 @@ public class DocumentTests
     /// Tests that indexer updates the updated timestamp.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public async Task Indexer_Should_Update_Updated_Timestamp()
     {
         // Arrange
@@ -103,7 +103,7 @@ public class DocumentTests
     /// <summary>
     /// Tests that Get returns typed value.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public void Get_Should_Return_Typed_Value()
     {
         // Arrange
@@ -123,7 +123,7 @@ public class DocumentTests
     /// <summary>
     /// Tests that Get returns default for non-existent key.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public void Get_Should_Return_Default_For_NonExistent_Key()
     {
         // Arrange
@@ -138,7 +138,7 @@ public class DocumentTests
     /// <summary>
     /// Tests that Set adds or updates value.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public void Set_Should_Add_Or_Update_Value()
     {
         // Arrange
@@ -155,7 +155,7 @@ public class DocumentTests
     /// <summary>
     /// Tests that Remove deletes field.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public void Remove_Should_Delete_Field()
     {
         // Arrange
@@ -174,7 +174,7 @@ public class DocumentTests
     /// <summary>
     /// Tests that Remove returns false for non-existent key.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public void Remove_Should_Return_False_For_NonExistent_Key()
     {
         // Arrange
@@ -190,7 +190,7 @@ public class DocumentTests
     /// <summary>
     /// Tests that ContainsKey checks field existence.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public void ContainsKey_Should_Check_Field_Existence()
     {
         // Arrange
@@ -205,7 +205,7 @@ public class DocumentTests
     /// <summary>
     /// Tests that GetKeys returns all field names.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public void GetKeys_Should_Return_All_Field_Names()
     {
         // Arrange
@@ -224,7 +224,7 @@ public class DocumentTests
     /// <summary>
     /// Tests that ToJson serializes to JSON string.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public void ToJson_Should_Serialize_To_Json_String()
     {
         // Arrange
@@ -245,7 +245,7 @@ public class DocumentTests
     /// <summary>
     /// Tests that FromJson deserializes from JSON string.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public void FromJson_Should_Deserialize_From_Json_String()
     {
         // Arrange
@@ -271,7 +271,7 @@ public class DocumentTests
     /// <summary>
     /// Tests that FromObject converts object to Document.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public void FromObject_Should_Convert_Object_To_Document()
     {
         // Arrange
@@ -299,7 +299,7 @@ public class DocumentTests
     /// <summary>
     /// Tests that ToObject converts Document to object.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public void ToObject_Should_Convert_Document_To_Object()
     {
         // Arrange
@@ -320,7 +320,7 @@ public class DocumentTests
     /// <summary>
     /// Tests that Clone creates deep copy.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public void Clone_Should_Create_Deep_Copy()
     {
         // Arrange
@@ -341,7 +341,7 @@ public class DocumentTests
     /// <summary>
     /// Tests that Merge combines documents.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public void Merge_Should_Combine_Documents()
     {
         // Arrange
@@ -365,7 +365,7 @@ public class DocumentTests
     /// <summary>
     /// Tests that Clear removes all fields.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 5000)]
     public void Clear_Should_Remove_All_Fields()
     {
         // Arrange
