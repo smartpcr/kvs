@@ -15,7 +15,7 @@ namespace Kvs.Core.Database;
 /// <summary>
 /// Represents a NoSQL database instance.
 /// </summary>
-public class Database : IDatabase
+public class Database : IDatabase, ITransactionContext
 {
     private readonly string path;
     private readonly ConcurrentDictionary<string, object> collections;
@@ -31,6 +31,7 @@ public class Database : IDatabase
     private DeadlockDetector? deadlockDetector;
     private LockManager? lockManager;
     private TransactionCoordinator? transactionCoordinator;
+    private VersionManager? versionManager;
 #else
     private IStorageEngine storageEngine;
     private IPageManager pageManager;
@@ -41,6 +42,7 @@ public class Database : IDatabase
     private DeadlockDetector deadlockDetector;
     private LockManager lockManager;
     private TransactionCoordinator transactionCoordinator;
+    private VersionManager versionManager;
 #endif
     private bool isOpen;
     private bool disposed;
@@ -108,6 +110,7 @@ public class Database : IDatabase
             this.lockManager.DeadlockDetected += this.OnLockManagerDeadlockDetected;
 
             this.transactionCoordinator = new TransactionCoordinator(this.databaseWal);
+            this.versionManager = new VersionManager();
 
             if (await this.recoveryManager.IsRecoveryNeededAsync().ConfigureAwait(false))
             {
@@ -243,6 +246,87 @@ public class Database : IDatabase
 
         return await this.recoveryManager!.RecoverAsync().ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Gets the current transaction ID if in a transaction context.
+    /// </summary>
+#if NET8_0_OR_GREATER
+    string? ITransactionContext.CurrentTransactionId => null; // To be implemented with thread-local storage
+#else
+    string ITransactionContext.CurrentTransactionId => null; // To be implemented with thread-local storage
+#endif
+
+    /// <summary>
+    /// Gets the transaction data for the current transaction.
+    /// </summary>
+    /// <param name="transactionId">The transaction ID.</param>
+    /// <returns>The transaction data, or null if not found.</returns>
+#if NET8_0_OR_GREATER
+    TransactionData? ITransactionContext.GetTransactionData(string transactionId)
+#else
+    TransactionData ITransactionContext.GetTransactionData(string transactionId)
+#endif
+    {
+        if (this.activeTransactions.TryGetValue(transactionId, out var transaction))
+        {
+            return transaction.GetTransactionData();
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Gets the isolation level for a transaction.
+    /// </summary>
+    /// <param name="transactionId">The transaction ID.</param>
+    /// <returns>The isolation level.</returns>
+    IsolationLevel ITransactionContext.GetIsolationLevel(string transactionId)
+    {
+        if (this.activeTransactions.TryGetValue(transactionId, out var transaction))
+        {
+            return transaction.IsolationLevel;
+        }
+
+        return IsolationLevel.Serializable;
+    }
+
+    /// <summary>
+    /// Gets the start time of a transaction.
+    /// </summary>
+    /// <param name="transactionId">The transaction ID.</param>
+    /// <returns>The start time.</returns>
+    DateTime ITransactionContext.GetTransactionStartTime(string transactionId)
+    {
+        if (this.activeTransactions.TryGetValue(transactionId, out var transaction))
+        {
+            return transaction.StartTime;
+        }
+
+        return DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Checks if a document version is visible to a transaction.
+    /// </summary>
+    /// <param name="document">The document to check.</param>
+    /// <param name="transactionId">The transaction ID.</param>
+    /// <returns>True if the document is visible; otherwise, false.</returns>
+    bool ITransactionContext.IsDocumentVisible(Document document, string transactionId)
+    {
+        if (!this.activeTransactions.TryGetValue(transactionId, out var transaction))
+        {
+            return true; // If no transaction, document is visible
+        }
+
+        // For now, all documents are visible
+        // In full implementation, would check version visibility
+        return true;
+    }
+
+    /// <summary>
+    /// Gets the version manager.
+    /// </summary>
+    VersionManager ITransactionContext.VersionManager => this.versionManager ?? throw new InvalidOperationException("VersionManager is not initialized.");
 
     /// <summary>
     /// Disposes the database.
@@ -408,9 +492,9 @@ public class Database : IDatabase
     }
 
 #if NET8_0_OR_GREATER
-    private async void OnDeadlockDetected(object? sender, DeadlockEventArgs e)
+    private void OnDeadlockDetected(object? sender, DeadlockEventArgs e)
 #else
-    private async void OnDeadlockDetected(object sender, DeadlockEventArgs e)
+    private void OnDeadlockDetected(object sender, DeadlockEventArgs e)
 #endif
     {
         // Abort the victim transaction
@@ -418,7 +502,7 @@ public class Database : IDatabase
         {
             // Mark as aborted before rollback to prevent further operations
             victimTransaction!.State = TransactionState.Aborted;
-            
+
             // The transaction will detect it's been aborted and throw DeadlockException
             // We don't need to call RollbackAsync here as it will be called when the
             // transaction throws the exception
@@ -426,9 +510,9 @@ public class Database : IDatabase
     }
 
 #if NET8_0_OR_GREATER
-    private async void OnLockManagerDeadlockDetected(object? sender, DeadlockEventArgs e)
+    private void OnLockManagerDeadlockDetected(object? sender, DeadlockEventArgs e)
 #else
-    private async void OnLockManagerDeadlockDetected(object sender, DeadlockEventArgs e)
+    private void OnLockManagerDeadlockDetected(object sender, DeadlockEventArgs e)
 #endif
     {
         // The lock manager detected a deadlock - abort the victim transaction
@@ -436,7 +520,7 @@ public class Database : IDatabase
         {
             // Mark as aborted before rollback to prevent further operations
             victimTransaction.State = TransactionState.Aborted;
-            
+
             // The transaction will detect it's been aborted and throw DeadlockException
             // We don't need to call RollbackAsync here as it will be called when the
             // transaction throws the exception

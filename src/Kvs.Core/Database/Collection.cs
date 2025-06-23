@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -113,6 +114,13 @@ public class Collection<T> : ICollection<T>
             var wal = this.database.GetDatabaseWAL();
             await wal.WriteEntryAsync(entry).ConfigureAwait(false);
 
+            // Add to version manager for MVCC
+            if (this.database is ITransactionContext transactionContext)
+            {
+                var versionManager = transactionContext.VersionManager;
+                versionManager.AddVersion($"{this.name}/{doc.Id}", doc, entry.TransactionId, entry.Timestamp);
+            }
+
             Interlocked.Increment(ref this.documentCount);
 
             return doc.Id;
@@ -196,6 +204,13 @@ public class Collection<T> : ICollection<T>
             var wal = this.database.GetDatabaseWAL();
             await wal.WriteEntryAsync(entry).ConfigureAwait(false);
 
+            // Add to version manager for MVCC
+            if (this.database is ITransactionContext transactionContext)
+            {
+                var versionManager = transactionContext.VersionManager;
+                versionManager.AddVersion($"{this.name}/{id}", newDoc, entry.TransactionId, entry.Timestamp);
+            }
+
             return true;
         }
         finally
@@ -246,6 +261,13 @@ public class Collection<T> : ICollection<T>
             var wal = this.database.GetDatabaseWAL();
             await wal.WriteEntryAsync(entry).ConfigureAwait(false);
 
+            // Mark as deleted in version manager for MVCC
+            if (this.database is ITransactionContext transactionContext)
+            {
+                var versionManager = transactionContext.VersionManager;
+                versionManager.MarkDeleted($"{this.name}/{id}", entry.TransactionId, entry.Timestamp);
+            }
+
             Interlocked.Decrement(ref this.documentCount);
 
             return true;
@@ -278,7 +300,106 @@ public class Collection<T> : ICollection<T>
             return null;
         }
 
-        return this.ConvertFromDocument(doc);
+        // Clone the document to prevent modifications from affecting the stored version
+        var clonedDoc = doc.Clone();
+        return this.ConvertFromDocument(clonedDoc);
+    }
+
+    /// <summary>
+    /// Finds a document by its ID with transaction context.
+    /// </summary>
+    /// <param name="id">The ID of the document to find.</param>
+    /// <param name="transactionId">The transaction ID.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result contains the document, or null if not found.</returns>
+#if NET472
+    internal async Task<T> FindByIdWithTransactionAsync(string id, string transactionId)
+#else
+    internal async Task<T?> FindByIdWithTransactionAsync(string id, string transactionId)
+#endif
+    {
+        if (string.IsNullOrEmpty(id))
+        {
+            throw new ArgumentException("Document ID cannot be null or empty.", nameof(id));
+        }
+
+        // Check if the database supports transaction context
+        if (this.database is ITransactionContext transactionContext && !string.IsNullOrEmpty(transactionId))
+        {
+            // Check transaction data first - this contains uncommitted changes
+            var transactionData = transactionContext.GetTransactionData(transactionId);
+            if (transactionData != null)
+            {
+                var transactionDoc = transactionData.GetDocument(this.name, id);
+                if (transactionDoc != null)
+                {
+                    if (transactionDoc.OperationType == TransactionOperationType.Delete)
+                    {
+                        return null;
+                    }
+
+                    if (transactionDoc.Document != null)
+                    {
+                        return this.ConvertFromDocument(transactionDoc.Document);
+                    }
+                }
+            }
+
+            // Get visible version from version manager based on isolation level
+            var isolationLevel = transactionContext.GetIsolationLevel(transactionId);
+            var transactionStartTime = transactionContext.GetTransactionStartTime(transactionId);
+            var versionManager = transactionContext.VersionManager;
+            var key = $"{this.name}/{id}";
+
+            var visibleDoc = versionManager.GetVisibleVersion(key, transactionId, transactionStartTime, isolationLevel);
+            if (visibleDoc != null)
+            {
+                // Record read version for repeatable read and serializable
+                if (transactionData != null && (isolationLevel == IsolationLevel.RepeatableRead || isolationLevel == IsolationLevel.Serializable))
+                {
+                    transactionData.RecordReadVersion(this.name, id, visibleDoc.Version);
+                }
+
+                // Clone to prevent modifications from affecting the version manager
+                var clonedVisibleDoc = visibleDoc.Clone();
+                return this.ConvertFromDocument(clonedVisibleDoc);
+            }
+
+            // If no version in version manager, check primary index
+            var doc = await this.primaryIndex!.GetAsync(id).ConfigureAwait(false);
+            if (doc == null)
+            {
+                return null;
+            }
+
+            // For repeatable read and serializable, check if document was created after transaction start
+            if ((isolationLevel == IsolationLevel.RepeatableRead || isolationLevel == IsolationLevel.Serializable) &&
+                doc.Created > transactionStartTime)
+            {
+                return null; // Document not visible to this transaction
+            }
+
+            // Clone the document to prevent modifications from affecting the stored version
+            var clonedDoc = doc.Clone();
+
+            // Record read version for repeatable read and serializable
+            if (transactionData != null && (isolationLevel == IsolationLevel.RepeatableRead || isolationLevel == IsolationLevel.Serializable))
+            {
+                transactionData.RecordReadVersion(this.name, id, clonedDoc.Version);
+            }
+
+            return this.ConvertFromDocument(clonedDoc);
+        }
+
+        // No transaction context, use regular read
+        var document = await this.primaryIndex!.GetAsync(id).ConfigureAwait(false);
+        if (document == null)
+        {
+            return null;
+        }
+
+        // Clone the document to prevent modifications from affecting the stored version
+        var clonedDocument = document.Clone();
+        return this.ConvertFromDocument(clonedDocument);
     }
 
     /// <summary>
@@ -290,6 +411,49 @@ public class Collection<T> : ICollection<T>
         await foreach (var kvp in this.primaryIndex!.RangeAsync(string.Empty, "￿"))
         {
             yield return this.ConvertFromDocument(kvp.Value);
+        }
+    }
+
+    /// <summary>
+    /// Finds all documents in the collection with transaction context.
+    /// </summary>
+    /// <param name="transactionId">The transaction ID.</param>
+    /// <returns>An async enumerable of all documents in the collection.</returns>
+    internal async IAsyncEnumerable<T> FindAllWithTransactionAsync(string transactionId)
+    {
+        // Check if we need range locking for serializable isolation
+        if (this.database is ITransactionContext transactionContext && !string.IsNullOrEmpty(transactionId))
+        {
+            var isolationLevel = transactionContext.GetIsolationLevel(transactionId);
+            if (isolationLevel == IsolationLevel.Serializable)
+            {
+                // Acquire range lock for the entire collection
+                var lockManager = this.database.GetLockManager();
+                var lockAcquired = await lockManager.AcquireRangeLockAsync(
+                    transactionId, this.name, string.Empty, "￿", LockType.Read, TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+
+                if (!lockAcquired)
+                {
+                    throw new TimeoutException($"Failed to acquire range lock for collection '{this.name}'");
+                }
+            }
+        }
+
+        await foreach (var kvp in this.primaryIndex!.RangeAsync(string.Empty, "￿"))
+        {
+            // Use transaction-aware read for each document
+            if (!string.IsNullOrEmpty(transactionId))
+            {
+                var doc = await this.FindByIdWithTransactionAsync(kvp.Value.Id, transactionId).ConfigureAwait(false);
+                if (doc != null)
+                {
+                    yield return doc;
+                }
+            }
+            else
+            {
+                yield return this.ConvertFromDocument(kvp.Value);
+            }
         }
     }
 

@@ -147,10 +147,10 @@ public class TransactionTests : IDisposable
         await this.database.OpenAsync();
 
         // Act
-        using var transaction = await this.database.BeginTransactionAsync(Kvs.Core.Database.IsolationLevel.ReadCommitted);
+        using var transaction = await this.database.BeginTransactionAsync(IsolationLevel.ReadCommitted);
 
         // Assert
-        transaction.IsolationLevel.Should().Be(Kvs.Core.Database.IsolationLevel.ReadCommitted);
+        transaction.IsolationLevel.Should().Be(IsolationLevel.ReadCommitted);
     }
 
     /// <summary>

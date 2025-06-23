@@ -3,6 +3,7 @@
 #endif
 
 using System;
+using System.Data;
 using System.Threading.Tasks;
 
 namespace Kvs.Core.Database;

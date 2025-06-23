@@ -28,6 +28,7 @@ public class Transaction : ITransaction
     private readonly SemaphoreSlim transactionLock;
     private readonly ISerializer serializer;
     private readonly ConcurrentDictionary<string, long> keyToPageIdMap;
+    private readonly TransactionData transactionData;
     private TransactionState state;
     private TimeSpan timeout;
 #if NET8_0_OR_GREATER
@@ -38,6 +39,7 @@ public class Transaction : ITransaction
     private bool disposed;
     private readonly object stateLock = new object();
     private readonly ManualResetEventSlim abortedEvent = new ManualResetEventSlim(false);
+    private readonly CancellationTokenSource abortCancellationSource = new CancellationTokenSource();
 
     /// <summary>
     /// Gets the unique identifier for the transaction.
@@ -75,6 +77,7 @@ public class Transaction : ITransaction
                 if (value == TransactionState.Aborted)
                 {
                     this.abortedEvent.Set();
+                    this.abortCancellationSource.Cancel();
                 }
             }
         }
@@ -104,6 +107,7 @@ public class Transaction : ITransaction
         this.state = TransactionState.Active;
         this.timeout = TimeSpan.FromMinutes(5);
         this.keyToPageIdMap = new ConcurrentDictionary<string, long>();
+        this.transactionData = new TransactionData();
 
         this.StartTimeoutTimer();
     }
@@ -151,21 +155,29 @@ public class Transaction : ITransaction
             if (this.isolationLevel == IsolationLevel.Serializable)
             {
                 // Serializable requires read locks to be held until commit
-                var lockTask = lockManager.AcquireReadLockAsync(this.transactionId, key, TimeSpan.FromSeconds(30));
-                var abortTask = Task.Run(() => this.abortedEvent.Wait(TimeSpan.FromSeconds(30)));
-
-                var completedTask = await Task.WhenAny(lockTask, abortTask).ConfigureAwait(false);
-
-                if (completedTask == abortTask && this.abortedEvent.IsSet)
+                try
                 {
-                    this.ThrowIfDeadlockVictim();
+                    lockAcquired = await lockManager.AcquireReadLockAsync(this.transactionId, key, TimeSpan.FromSeconds(30), this.abortCancellationSource.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Check if we were aborted due to deadlock
+                    if (this.state == TransactionState.Aborted)
+                    {
+                        throw new DeadlockException(this.transactionId, new[] { this.transactionId });
+                    }
+
+                    throw new TimeoutException($"Failed to acquire read lock for key '{key}'");
                 }
 
-                lockAcquired = await lockTask.ConfigureAwait(false);
                 if (!lockAcquired)
                 {
                     // Check if we were aborted due to deadlock
-                    this.ThrowIfDeadlockVictim();
+                    if (this.state == TransactionState.Aborted)
+                    {
+                        throw new DeadlockException(this.transactionId, new[] { this.transactionId });
+                    }
+
                     throw new TimeoutException($"Failed to acquire read lock for key '{key}'");
                 }
             }
@@ -173,24 +185,50 @@ public class Transaction : ITransaction
             await this.transactionLock.WaitAsync().ConfigureAwait(false);
             try
             {
-                // Check if we have a pending write for this key
+                // First check if we have a pending operation for this key in the transaction
                 if (this.operations.TryGetValue(key, out var operation))
                 {
-                    if (operation.Type == OperationType.Delete)
+                    if (operation.Type == TransactionOperationType.Delete)
                     {
                         // Deleted in this transaction
                         return default;
                     }
 
-                    if (operation.Type == OperationType.Update)
+                    if (operation.Type == TransactionOperationType.Update && operation.NewValue != null)
                     {
-                        if (operation.NewValue is T value)
+                        // Return the value from the operation
+                        if (operation.NewValue is T typedValue)
                         {
-                            return value;
+                            return typedValue;
                         }
 
-                        // Type mismatch or null - return default
-                        return default;
+                        // Try to convert if it's a Document and we need a different type
+                        if (operation.NewValue is Document doc && typeof(T) != typeof(Document))
+                        {
+                            try
+                            {
+                                var method = doc.GetType().GetMethod("ToObject")?.MakeGenericMethod(typeof(T));
+                                if (method != null)
+                                {
+                                    var invokeResult = method.Invoke(doc, null);
+                                    return invokeResult != null ? (T)invokeResult : default;
+                                }
+                            }
+                            catch
+                            {
+                                // Ignore and try default conversion
+                            }
+                        }
+
+                        // Try direct cast as last resort
+                        try
+                        {
+                            return (T)operation.NewValue;
+                        }
+                        catch
+                        {
+                            return default;
+                        }
                     }
                 }
 
@@ -200,8 +238,8 @@ public class Transaction : ITransaction
                     return (T)cachedValue;
                 }
 
-                // Read from storage
-                var result = await this.GetAsync<T>(key).ConfigureAwait(false);
+                // Read from storage with isolation level awareness
+                var result = await this.GetWithIsolationAsync<T>(key).ConfigureAwait(false);
 
                 // Cache the result only if it's not null
                 if (result != null)
@@ -270,32 +308,38 @@ public class Transaction : ITransaction
         if (currentLockType == LockType.Read)
         {
             // Upgrade from read to write lock
-            var upgradeTask = lockManager.UpgradeLockAsync(this.transactionId, key, TimeSpan.FromSeconds(30));
-            var abortTask = Task.Run(() => this.abortedEvent.Wait(TimeSpan.FromSeconds(30)));
-
-            var completedTask = await Task.WhenAny(upgradeTask, abortTask).ConfigureAwait(false);
-
-            if (completedTask == abortTask && this.abortedEvent.IsSet)
+            try
             {
-                this.ThrowIfDeadlockVictim();
+                lockAcquired = await lockManager.UpgradeLockAsync(this.transactionId, key, TimeSpan.FromSeconds(30), this.abortCancellationSource.Token).ConfigureAwait(false);
             }
+            catch (OperationCanceledException)
+            {
+                // Check if we were aborted due to deadlock
+                if (this.state == TransactionState.Aborted)
+                {
+                    throw new DeadlockException(this.transactionId, new[] { this.transactionId });
+                }
 
-            lockAcquired = await upgradeTask.ConfigureAwait(false);
+                throw new TimeoutException($"Failed to upgrade lock for key '{key}'");
+            }
         }
         else if (currentLockType == LockType.None)
         {
             // Acquire write lock - required for all isolation levels
-            var lockTask = lockManager.AcquireWriteLockAsync(this.transactionId, key, TimeSpan.FromSeconds(30));
-            var abortTask = Task.Run(() => this.abortedEvent.Wait(TimeSpan.FromSeconds(30)));
-
-            var completedTask = await Task.WhenAny(lockTask, abortTask).ConfigureAwait(false);
-
-            if (completedTask == abortTask && this.abortedEvent.IsSet)
+            try
             {
-                this.ThrowIfDeadlockVictim();
+                lockAcquired = await lockManager.AcquireWriteLockAsync(this.transactionId, key, TimeSpan.FromSeconds(30), this.abortCancellationSource.Token).ConfigureAwait(false);
             }
+            catch (OperationCanceledException)
+            {
+                // Check if we were aborted due to deadlock
+                if (this.state == TransactionState.Aborted)
+                {
+                    throw new DeadlockException(this.transactionId, new[] { this.transactionId });
+                }
 
-            lockAcquired = await lockTask.ConfigureAwait(false);
+                throw new TimeoutException($"Failed to acquire write lock for key '{key}'");
+            }
         }
         else
         {
@@ -306,7 +350,11 @@ public class Transaction : ITransaction
         if (!lockAcquired)
         {
             // Check if we were aborted due to deadlock
-            this.ThrowIfDeadlockVictim();
+            if (this.state == TransactionState.Aborted)
+            {
+                throw new DeadlockException(this.transactionId, new[] { this.transactionId });
+            }
+
             throw new TimeoutException($"Failed to acquire write lock for key '{key}'");
         }
 
@@ -331,7 +379,7 @@ public class Transaction : ITransaction
             // Create operation
             var operation = new TransactionOperation
             {
-                Type = OperationType.Update,
+                Type = TransactionOperationType.Update,
                 Key = key,
                 OldValue = oldValue,
                 NewValue = value,
@@ -339,6 +387,23 @@ public class Transaction : ITransaction
             };
 
             this.operations[key] = operation;
+
+            // Store in transaction data
+            var parts = key.Split('/');
+            if (parts.Length == 2)
+            {
+                if (value is Document doc)
+                {
+                    this.transactionData.SetDocument(parts[0], parts[1], doc, TransactionOperationType.Update);
+                }
+                else
+                {
+                    // For non-Document types, we still need to track them
+                    // The operations dictionary already has the value, so we just need to ensure
+                    // transactionData knows about the operation
+                    this.transactionData.SetDocument(parts[0], parts[1], null, TransactionOperationType.Update);
+                }
+            }
 
             // Log the write operation
             var entry = new TransactionLogEntry
@@ -378,32 +443,60 @@ public class Transaction : ITransaction
 
         // Acquire write lock for delete operation
         var lockManager = this.database.GetLockManager();
-        var lockTask = lockManager.AcquireWriteLockAsync(this.transactionId, key, TimeSpan.FromSeconds(30));
-        var abortTask = Task.Run(() => this.abortedEvent.Wait(TimeSpan.FromSeconds(30)));
-
-        var completedTask = await Task.WhenAny(lockTask, abortTask).ConfigureAwait(false);
-
-        if (completedTask == abortTask && this.abortedEvent.IsSet)
+        bool lockAcquired;
+        try
         {
-            this.ThrowIfDeadlockVictim();
+            using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(this.abortCancellationSource.Token))
+            {
+                linkedCts.CancelAfter(TimeSpan.FromSeconds(30));
+                lockAcquired = await lockManager.AcquireWriteLockAsync(this.transactionId, key, TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Check if we were aborted due to deadlock
+            if (this.state == TransactionState.Aborted)
+            {
+                throw new DeadlockException(this.transactionId, new[] { this.transactionId });
+            }
+
+            throw new TimeoutException($"Failed to acquire write lock for key '{key}'");
         }
 
-        var lockAcquired = await lockTask.ConfigureAwait(false);
         if (!lockAcquired)
         {
             // Check if we were aborted due to deadlock
-            this.ThrowIfDeadlockVictim();
+            if (this.state == TransactionState.Aborted)
+            {
+                throw new DeadlockException(this.transactionId, new[] { this.transactionId });
+            }
+
             throw new TimeoutException($"Failed to acquire write lock for key '{key}'");
         }
 
         await this.transactionLock.WaitAsync().ConfigureAwait(false);
         try
         {
-            // Check if key exists
-            var exists = await this.ExistsAsync(key).ConfigureAwait(false);
-            if (!exists)
+            // Check if we already have an operation for this key
+            if (this.operations.TryGetValue(key, out var existingOperation))
             {
-                return false;
+                // If it was previously deleted, it doesn't exist
+                if (existingOperation.Type == TransactionOperationType.Delete)
+                {
+                    return false;
+                }
+
+                // If it was previously updated, it exists
+                // Continue to get the old value
+            }
+            else
+            {
+                // Check if key exists in the database
+                var exists = await this.ExistsAsync(key).ConfigureAwait(false);
+                if (!exists)
+                {
+                    return false;
+                }
             }
 
             // Get the old value for rollback
@@ -424,7 +517,7 @@ public class Transaction : ITransaction
             // Create operation
             var operation = new TransactionOperation
             {
-                Type = OperationType.Delete,
+                Type = TransactionOperationType.Delete,
                 Key = key,
                 OldValue = oldValue,
                 NewValue = null,
@@ -432,6 +525,13 @@ public class Transaction : ITransaction
             };
 
             this.operations[key] = operation;
+
+            // Store deletion in transaction data
+            var parts = key.Split('/');
+            if (parts.Length == 2)
+            {
+                this.transactionData.SetDocument(parts[0], parts[1], null, TransactionOperationType.Delete);
+            }
 
             // Remove from read cache since it's deleted
             this.readCache.TryRemove(key, out _);
@@ -559,6 +659,7 @@ public class Transaction : ITransaction
             {
                 // Ignore errors during cleanup
             }
+
             return;
         }
 
@@ -595,6 +696,15 @@ public class Transaction : ITransaction
     }
 
     /// <summary>
+    /// Gets the transaction data.
+    /// </summary>
+    /// <returns>The transaction data.</returns>
+    internal TransactionData GetTransactionData()
+    {
+        return this.transactionData;
+    }
+
+    /// <summary>
     /// Disposes the transaction.
     /// </summary>
     public void Dispose()
@@ -623,6 +733,7 @@ public class Transaction : ITransaction
                 this.StopTimeoutTimer();
                 this.transactionLock?.Dispose();
                 this.abortedEvent?.Dispose();
+                this.abortCancellationSource?.Dispose();
             }
 
             this.disposed = true;
@@ -644,9 +755,13 @@ public class Transaction : ITransaction
         // Get the collection
         var collection = this.database.GetCollection<Document>(collectionName);
 
+        // Get version manager
+        var versionManager = ((ITransactionContext)this.database).VersionManager;
+        var commitTime = DateTime.UtcNow;
+
         switch (operation.Type)
         {
-            case OperationType.Update:
+            case TransactionOperationType.Update:
                 if (operation.NewValue is Document doc)
                 {
                     // Check if document exists
@@ -661,12 +776,25 @@ public class Transaction : ITransaction
                         doc.Id = documentId;
                         await collection.InsertAsync(doc).ConfigureAwait(false);
                     }
+
+                    // Add to version manager
+                    if (versionManager != null)
+                    {
+                        versionManager.AddVersion(operation.Key, doc, this.transactionId, commitTime);
+                    }
                 }
 
                 break;
 
-            case OperationType.Delete:
+            case TransactionOperationType.Delete:
                 await collection.DeleteAsync(documentId).ConfigureAwait(false);
+
+                // Mark as deleted in version manager
+                if (versionManager != null)
+                {
+                    versionManager.MarkDeleted(operation.Key, this.transactionId, commitTime);
+                }
+
                 break;
         }
     }
@@ -730,19 +858,97 @@ public class Transaction : ITransaction
         return default;
     }
 
+#if NET8_0_OR_GREATER
+    private async Task<T?> GetWithIsolationAsync<T>(string key)
+#else
+    private async Task<T> GetWithIsolationAsync<T>(string key)
+#endif
+    {
+        // Parse the key to get collection name and document ID
+        var parts = key.Split('/');
+        if (parts.Length != 2)
+        {
+            return default;
+        }
+
+        var collectionName = parts[0];
+        var documentId = parts[1];
+
+        // Get the collection with transaction context
+        var collection = this.database.GetCollection<Document>(collectionName);
+        if (collection == null)
+        {
+            return default;
+        }
+
+        // Use transaction-aware read if the collection is our internal type
+#if NET8_0_OR_GREATER
+        Document? document = null;
+#else
+        Document document = null;
+#endif
+        if (collection is Collection<Document> internalCollection)
+        {
+            document = await internalCollection.FindByIdWithTransactionAsync(documentId, this.transactionId).ConfigureAwait(false);
+        }
+        else
+        {
+            document = await collection.FindByIdAsync(documentId).ConfigureAwait(false);
+        }
+
+        if (document == null)
+        {
+            return default;
+        }
+
+        // Record the version read for repeatable read and serializable isolation
+        if (this.isolationLevel == IsolationLevel.RepeatableRead || this.isolationLevel == IsolationLevel.Serializable)
+        {
+            this.transactionData.RecordReadVersion(collectionName, documentId, document.Version);
+        }
+
+        // Convert to the requested type
+        if (typeof(T) == typeof(Document))
+        {
+            return (T)(object)document;
+        }
+
+        // Try to convert using Document's ToObject method if T is a reference type
+        if (!typeof(T).IsValueType && typeof(T) != typeof(string))
+        {
+            try
+            {
+                var method = document.GetType().GetMethod("ToObject")?.MakeGenericMethod(typeof(T));
+                if (method != null)
+                {
+                    var result = method.Invoke(document, null);
+                    return result != null ? (T)result : default;
+                }
+
+                return default;
+            }
+            catch
+            {
+                return default;
+            }
+        }
+
+        return default;
+    }
+
     private async Task<bool> ExistsAsync(string key)
     {
         // Check if we have a pending operation for this key
         if (this.operations.TryGetValue(key, out var operation))
         {
             // If it's deleted in this transaction, it doesn't exist
-            if (operation.Type == OperationType.Delete)
+            if (operation.Type == TransactionOperationType.Delete)
             {
                 return false;
             }
 
             // If it's updated in this transaction, it exists
-            if (operation.Type == OperationType.Update)
+            if (operation.Type == TransactionOperationType.Update)
             {
                 return true;
             }
@@ -830,12 +1036,30 @@ public class Transaction : ITransaction
     private async void OnTimeout(object state)
 #endif
     {
-        if (this.state == TransactionState.Active ||
-            this.state == TransactionState.Preparing ||
-            this.state == TransactionState.Prepared)
+        lock (this.stateLock)
         {
-            this.state = TransactionState.Aborted;
+            if (this.state == TransactionState.Active ||
+                this.state == TransactionState.Preparing ||
+                this.state == TransactionState.Prepared)
+            {
+                this.state = TransactionState.Aborted;
+                this.abortedEvent.Set();
+            }
+            else
+            {
+                // Already in terminal state
+                return;
+            }
+        }
+
+        // Rollback outside of lock to avoid deadlock
+        try
+        {
             await this.RollbackAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            // Ignore errors during timeout rollback
         }
     }
 
@@ -885,7 +1109,7 @@ public class Transaction : ITransaction
         /// <summary>
         /// Gets or sets the operation type.
         /// </summary>
-        public OperationType Type { get; set; }
+        public TransactionOperationType Type { get; set; }
 
         /// <summary>
         /// Gets or sets the key.

@@ -60,6 +60,9 @@ public class DeadlockTests : IDisposable
             await txn2.WriteAsync("test/doc2", doc2InTxn2);
         }
 
+        // Give transactions time to acquire their initial locks
+        await Task.Delay(100);
+
         // Now create the deadlock
         var task1 = Task.Run(async () =>
         {
@@ -80,6 +83,8 @@ public class DeadlockTests : IDisposable
             }
         });
 
+        // Start the second task with a small delay to ensure proper ordering
+        await Task.Delay(50);
         var task2 = Task.Run(async () =>
         {
             // Transaction 2 tries to lock doc1 (held by txn1)

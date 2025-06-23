@@ -24,7 +24,9 @@
       "Bash(cp:*)",
       "Bash(git checkout:*)",
       "Bash(true)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(dotnet new:*)"
     ],
     "deny": []
   }

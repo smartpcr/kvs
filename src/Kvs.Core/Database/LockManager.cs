@@ -49,7 +49,20 @@ public class LockManager : ILockManager
     /// <param name="resourceId">The ID of the resource to lock.</param>
     /// <param name="timeout">The maximum time to wait for acquiring the lock.</param>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    public async Task<bool> AcquireReadLockAsync(string transactionId, string resourceId, TimeSpan timeout)
+    public Task<bool> AcquireReadLockAsync(string transactionId, string resourceId, TimeSpan timeout)
+    {
+        return this.AcquireReadLockAsync(transactionId, resourceId, timeout, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Acquires a read lock on a resource for a transaction.
+    /// </summary>
+    /// <param name="transactionId">The ID of the transaction requesting the lock.</param>
+    /// <param name="resourceId">The ID of the resource to lock.</param>
+    /// <param name="timeout">The maximum time to wait for acquiring the lock.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    public async Task<bool> AcquireReadLockAsync(string transactionId, string resourceId, TimeSpan timeout, CancellationToken cancellationToken)
     {
         this.ThrowIfDisposed();
 
@@ -65,8 +78,9 @@ public class LockManager : ILockManager
 
         var resourceLock = this.resourceLocks.GetOrAdd(resourceId, id => new ResourceLock(id));
 
-        using (var cts = new CancellationTokenSource(timeout))
+        using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
         {
+            cts.CancelAfter(timeout);
             try
             {
                 // Add to wait-for graph before trying to acquire
@@ -115,7 +129,20 @@ public class LockManager : ILockManager
     /// <param name="resourceId">The ID of the resource to lock.</param>
     /// <param name="timeout">The maximum time to wait for acquiring the lock.</param>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    public async Task<bool> AcquireWriteLockAsync(string transactionId, string resourceId, TimeSpan timeout)
+    public Task<bool> AcquireWriteLockAsync(string transactionId, string resourceId, TimeSpan timeout)
+    {
+        return this.AcquireWriteLockAsync(transactionId, resourceId, timeout, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Acquires a write lock on a resource for a transaction.
+    /// </summary>
+    /// <param name="transactionId">The ID of the transaction requesting the lock.</param>
+    /// <param name="resourceId">The ID of the resource to lock.</param>
+    /// <param name="timeout">The maximum time to wait for acquiring the lock.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    public async Task<bool> AcquireWriteLockAsync(string transactionId, string resourceId, TimeSpan timeout, CancellationToken cancellationToken)
     {
         this.ThrowIfDisposed();
 
@@ -131,8 +158,9 @@ public class LockManager : ILockManager
 
         var resourceLock = this.resourceLocks.GetOrAdd(resourceId, id => new ResourceLock(id));
 
-        using (var cts = new CancellationTokenSource(timeout))
+        using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
         {
+            cts.CancelAfter(timeout);
             try
             {
                 // Add to wait-for graph before trying to acquire
@@ -323,7 +351,20 @@ public class LockManager : ILockManager
     /// <param name="resourceId">The ID of the resource whose lock is being upgraded.</param>
     /// <param name="timeout">The maximum time to wait for upgrading the lock.</param>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    public async Task<bool> UpgradeLockAsync(string transactionId, string resourceId, TimeSpan timeout)
+    public Task<bool> UpgradeLockAsync(string transactionId, string resourceId, TimeSpan timeout)
+    {
+        return this.UpgradeLockAsync(transactionId, resourceId, timeout, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Upgrades a read lock to a write lock.
+    /// </summary>
+    /// <param name="transactionId">The ID of the transaction upgrading the lock.</param>
+    /// <param name="resourceId">The ID of the resource whose lock is being upgraded.</param>
+    /// <param name="timeout">The maximum time to wait for upgrading the lock.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    public async Task<bool> UpgradeLockAsync(string transactionId, string resourceId, TimeSpan timeout, CancellationToken cancellationToken)
     {
         this.ThrowIfDisposed();
 
@@ -342,8 +383,9 @@ public class LockManager : ILockManager
             return false;
         }
 
-        using (var cts = new CancellationTokenSource(timeout))
+        using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
         {
+            cts.CancelAfter(timeout);
             try
             {
                 // Add to wait-for graph before trying to upgrade
@@ -400,6 +442,72 @@ public class LockManager : ILockManager
         }
 
         return new LockStatus { IsLocked = false, LockType = LockType.None };
+    }
+
+    /// <summary>
+    /// Acquires a range lock on a collection for a transaction.
+    /// </summary>
+    /// <param name="transactionId">The transaction identifier.</param>
+    /// <param name="collectionName">The collection name.</param>
+    /// <param name="startKey">The start key of the range (inclusive).</param>
+    /// <param name="endKey">The end key of the range (inclusive).</param>
+    /// <param name="lockType">The type of lock to acquire.</param>
+    /// <param name="timeout">The timeout for acquiring the lock.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result indicates whether the lock was acquired.</returns>
+    public async Task<bool> AcquireRangeLockAsync(string transactionId, string collectionName, string startKey, string endKey, LockType lockType, TimeSpan timeout)
+    {
+        this.ThrowIfDisposed();
+
+        if (string.IsNullOrEmpty(transactionId))
+        {
+            throw new ArgumentException("Transaction ID cannot be null or empty.", nameof(transactionId));
+        }
+
+        if (string.IsNullOrEmpty(collectionName))
+        {
+            throw new ArgumentException("Collection name cannot be null or empty.", nameof(collectionName));
+        }
+
+        // For now, implement range locks as a lock on the collection
+        // In a full implementation, this would use interval trees or similar data structures
+        var rangeKey = $"{collectionName}:range:{startKey}:{endKey}";
+
+        if (lockType == LockType.Read)
+        {
+            return await this.AcquireReadLockAsync(transactionId, rangeKey, timeout).ConfigureAwait(false);
+        }
+        else if (lockType == LockType.Write)
+        {
+            return await this.AcquireWriteLockAsync(transactionId, rangeKey, timeout).ConfigureAwait(false);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Releases a range lock on a collection for a transaction.
+    /// </summary>
+    /// <param name="transactionId">The transaction identifier.</param>
+    /// <param name="collectionName">The collection name.</param>
+    /// <param name="startKey">The start key of the range.</param>
+    /// <param name="endKey">The end key of the range.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    public async Task ReleaseRangeLockAsync(string transactionId, string collectionName, string startKey, string endKey)
+    {
+        this.ThrowIfDisposed();
+
+        if (string.IsNullOrEmpty(transactionId))
+        {
+            throw new ArgumentException("Transaction ID cannot be null or empty.", nameof(transactionId));
+        }
+
+        if (string.IsNullOrEmpty(collectionName))
+        {
+            throw new ArgumentException("Collection name cannot be null or empty.", nameof(collectionName));
+        }
+
+        var rangeKey = $"{collectionName}:range:{startKey}:{endKey}";
+        await this.ReleaseLockAsync(transactionId, rangeKey).ConfigureAwait(false);
     }
 
     /// <summary>

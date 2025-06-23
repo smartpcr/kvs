@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Kvs.Core.Database;
@@ -18,6 +19,16 @@ public interface ILockManager : IDisposable
     Task<bool> AcquireReadLockAsync(string transactionId, string resourceId, TimeSpan timeout);
 
     /// <summary>
+    /// Acquires a read lock on a resource for a transaction with cancellation support.
+    /// </summary>
+    /// <param name="transactionId">The transaction identifier.</param>
+    /// <param name="resourceId">The resource identifier.</param>
+    /// <param name="timeout">The timeout for acquiring the lock.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result indicates whether the lock was acquired.</returns>
+    Task<bool> AcquireReadLockAsync(string transactionId, string resourceId, TimeSpan timeout, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Acquires a write lock on a resource for a transaction.
     /// </summary>
     /// <param name="transactionId">The transaction identifier.</param>
@@ -25,6 +36,16 @@ public interface ILockManager : IDisposable
     /// <param name="timeout">The timeout for acquiring the lock.</param>
     /// <returns>A task that represents the asynchronous operation. The task result indicates whether the lock was acquired.</returns>
     Task<bool> AcquireWriteLockAsync(string transactionId, string resourceId, TimeSpan timeout);
+
+    /// <summary>
+    /// Acquires a write lock on a resource for a transaction with cancellation support.
+    /// </summary>
+    /// <param name="transactionId">The transaction identifier.</param>
+    /// <param name="resourceId">The resource identifier.</param>
+    /// <param name="timeout">The timeout for acquiring the lock.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result indicates whether the lock was acquired.</returns>
+    Task<bool> AcquireWriteLockAsync(string transactionId, string resourceId, TimeSpan timeout, CancellationToken cancellationToken);
 
     /// <summary>
     /// Releases a lock on a resource for a transaction.
@@ -59,6 +80,16 @@ public interface ILockManager : IDisposable
     Task<bool> UpgradeLockAsync(string transactionId, string resourceId, TimeSpan timeout);
 
     /// <summary>
+    /// Upgrades a read lock to a write lock with cancellation support.
+    /// </summary>
+    /// <param name="transactionId">The transaction identifier.</param>
+    /// <param name="resourceId">The resource identifier.</param>
+    /// <param name="timeout">The timeout for upgrading the lock.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result indicates whether the upgrade was successful.</returns>
+    Task<bool> UpgradeLockAsync(string transactionId, string resourceId, TimeSpan timeout, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Gets the current lock status for a resource.
     /// </summary>
     /// <param name="resourceId">The resource identifier.</param>
@@ -69,6 +100,28 @@ public interface ILockManager : IDisposable
     /// Occurs when a deadlock is detected.
     /// </summary>
     event EventHandler<DeadlockEventArgs> DeadlockDetected;
+
+    /// <summary>
+    /// Acquires a range lock on a collection for a transaction.
+    /// </summary>
+    /// <param name="transactionId">The transaction identifier.</param>
+    /// <param name="collectionName">The collection name.</param>
+    /// <param name="startKey">The start key of the range (inclusive).</param>
+    /// <param name="endKey">The end key of the range (inclusive).</param>
+    /// <param name="lockType">The type of lock to acquire.</param>
+    /// <param name="timeout">The timeout for acquiring the lock.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result indicates whether the lock was acquired.</returns>
+    Task<bool> AcquireRangeLockAsync(string transactionId, string collectionName, string startKey, string endKey, LockType lockType, TimeSpan timeout);
+
+    /// <summary>
+    /// Releases a range lock on a collection for a transaction.
+    /// </summary>
+    /// <param name="transactionId">The transaction identifier.</param>
+    /// <param name="collectionName">The collection name.</param>
+    /// <param name="startKey">The start key of the range.</param>
+    /// <param name="endKey">The end key of the range.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
+    Task ReleaseRangeLockAsync(string transactionId, string collectionName, string startKey, string endKey);
 }
 
 /// <summary>
