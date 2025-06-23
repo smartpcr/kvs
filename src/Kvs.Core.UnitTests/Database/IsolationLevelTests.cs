@@ -25,7 +25,7 @@ public class IsolationLevelTests : IDisposable
         this.tempFiles = new List<string> { this.testDbPath };
     }
 
-    [Fact(Timeout = 10000)]
+    [Fact(Timeout = 5000)]
     public async Task ReadCommitted_ShouldNotSeeUncommittedChanges()
     {
         // Arrange
@@ -61,7 +61,7 @@ public class IsolationLevelTests : IDisposable
         await txn2.RollbackAsync();
     }
 
-    [Fact(Timeout = 10000)]
+    [Fact(Timeout = 5000)]
     public async Task RepeatableRead_ShouldMaintainConsistentView()
     {
         // Arrange
@@ -95,7 +95,7 @@ public class IsolationLevelTests : IDisposable
         await txn1.RollbackAsync();
     }
 
-    [Fact(Timeout = 10000)]
+    [Fact(Timeout = 5000)]
     public async Task Serializable_ShouldPreventPhantomReads()
     {
         // Arrange
@@ -146,7 +146,7 @@ public class IsolationLevelTests : IDisposable
         await txn2.RollbackAsync();
     }
 
-    [Fact(Timeout = 10000)]
+    [Fact(Timeout = 5000)]
     public async Task ReadUncommitted_ShouldSeeDirtyReads()
     {
         // Arrange
@@ -176,7 +176,7 @@ public class IsolationLevelTests : IDisposable
         await txn2.RollbackAsync();
     }
 
-    [Fact(Timeout = 10000)]
+    [Fact(Timeout = 5000)]
     public async Task Transaction_ShouldSeeOwnChanges()
     {
         // Arrange

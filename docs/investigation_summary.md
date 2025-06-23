@@ -1,6 +1,6 @@
 # Investigation Summary: Flaky and Disabled Tests
 
-Date: 2025-06-23
+Date: 2025-06-23 (Updated)
 
 ## Overview
 This document summarizes the investigation of flaky and disabled tests in the KVS project, identifying root causes and implemented fixes.
@@ -40,7 +40,37 @@ if (!hasPendingWrites)
 }
 ```
 
-### 2. VersionManager Timeout Tests (3 tests)
+### 2. IsolationTests.Serializable_ShouldPreventNonRepeatableReads
+**Status**: ✅ FIXED (New issue discovered and resolved)
+
+**Issue**:
+- Test was failing with DeadlockException
+- Transaction 2 was being marked as deadlock victim when Transaction 1 tried to re-read a document
+
+**Root Cause**:
+- Lock manager wasn't checking if a transaction already held a read lock before blocking on pending writes
+- Scenario:
+  1. Txn1 reads doc1 (gets read lock)
+  2. Txn2 tries to write doc1 (blocks, waits for Txn1's read lock)
+  3. Txn1 tries to read doc1 again - blocked by pending write from Txn2
+  4. Deadlock detected: Txn1 waiting for Txn2's pending write, Txn2 waiting for Txn1's read lock
+
+**Fix**:
+- Added check in `ResourceLock.AcquireReadLockAsync()` to immediately grant read lock if transaction already holds it
+- Prevents false deadlock when a transaction re-reads a resource it already has locked
+
+**Code Changes**:
+```csharp
+// If we already hold the read lock, return immediately
+if (this.readLockHolders.Contains(transactionId))
+{
+    this.lockSemaphore.Release();
+    semaphoreReleased = true;
+    return true;
+}
+```
+
+### 3. VersionManager Timeout Tests (3 tests)
 **Status**: ⚠️ DESIGN LIMITATION - Tests remain skipped
 
 **Tests**:
@@ -65,7 +95,7 @@ if (!hasPendingWrites)
 - Would need to implement true MVCC without write locks for non-Serializable isolation levels
 - Current design decision: Use simpler locking approach with version tracking
 
-### 3. TwoPhaseCommit Timeout Test
+### 4. TwoPhaseCommit Timeout Test
 **Status**: ℹ️ TEST INFRASTRUCTURE - Test remains skipped
 
 **Issue**:
@@ -82,7 +112,7 @@ if (!hasPendingWrites)
 - Would require implementing timeout in test infrastructure
 - Core TransactionCoordinator implementation may already support timeouts
 
-### 4. BTreeIndex Memory Allocation Test
+### 5. BTreeIndex Memory Allocation Test
 **Status**: ℹ️ INHERENTLY FLAKY - Test remains skipped
 
 **Test**: RangeAsync_LargeData_ShouldNotAllocateExcessiveMemory
@@ -107,6 +137,7 @@ if (!hasPendingWrites)
 
 ### Fixed Issues
 1. **Deadlock Detection**: Fixed false positive in deadlock detection by properly handling pending write requests in lock manager
+2. **Read Lock Re-acquisition**: Fixed deadlock when transaction tries to re-read a document it already has locked
 
 ### Design Limitations
 1. **MVCC Implementation**: Current hybrid locking/versioning approach causes reads to block on writes, which is not true MVCC behavior

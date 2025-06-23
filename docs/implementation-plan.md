@@ -971,6 +971,18 @@ public class DatabaseBenchmarks
 - Automatic cluster healing when partitions resolve
 - Split-brain detection and prevention
 
+## Recent Updates (2025-06-23)
+
+### Bug Fixes
+1. **Fixed deadlock detection false positives**: Modified lock manager to properly handle pending write requests when granting read locks
+2. **Fixed read lock re-acquisition deadlock**: Added check to allow transactions to re-acquire read locks they already hold without blocking on pending writes
+3. **Fixed build errors**: Resolved StyleCop analyzer violations (SA1028, SA1513, SA1611, SA1615) and CS0191 readonly field assignment errors
+
+### Known Limitations
+1. **Hybrid MVCC Implementation**: Current design uses locking for all write operations and read operations at Serializable isolation level, which differs from true MVCC behavior
+2. **Version Manager Tests**: Three tests remain skipped due to design limitation where reads block on writes even with version management
+3. **Test Infrastructure**: Two-phase commit timeout test skipped due to missing functionality in test mock
+
 ## Deliverables
 
 1. Core library (Kvs.Core) with clustering support

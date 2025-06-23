@@ -43,7 +43,7 @@ public class DeadlockEventArgs : EventArgs
 /// </summary>
 public sealed class DeadlockDetector : IDisposable
 {
-    private readonly ConcurrentDictionary<string, HashSet<string>> waitForGraph;
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> waitForGraph;
     private readonly ConcurrentDictionary<string, DateTime> transactionStartTimes;
     private readonly TimeSpan detectionInterval;
     private readonly SemaphoreSlim graphLock;
@@ -65,7 +65,7 @@ public sealed class DeadlockDetector : IDisposable
     /// <param name="detectionInterval">The interval between deadlock detection runs.</param>
     public DeadlockDetector(TimeSpan detectionInterval)
     {
-        this.waitForGraph = new ConcurrentDictionary<string, HashSet<string>>();
+        this.waitForGraph = new ConcurrentDictionary<string, ConcurrentDictionary<string, byte>>();
         this.transactionStartTimes = new ConcurrentDictionary<string, DateTime>();
         this.detectionInterval = detectionInterval;
         this.graphLock = new SemaphoreSlim(1, 1);
@@ -88,14 +88,14 @@ public sealed class DeadlockDetector : IDisposable
         await this.graphLock.WaitAsync().ConfigureAwait(false);
         try
         {
-            var dependencies = this.waitForGraph.GetOrAdd(waitingTransaction, _ => new HashSet<string>());
-            dependencies.Add(holdingTransaction);
+            var dependencies = this.waitForGraph.GetOrAdd(waitingTransaction, _ => new ConcurrentDictionary<string, byte>());
+            dependencies[holdingTransaction] = 0;
 
             this.transactionStartTimes.TryAdd(waitingTransaction, DateTime.UtcNow);
             this.transactionStartTimes.TryAdd(holdingTransaction, DateTime.UtcNow);
 
             // Check for deadlock immediately
-            var cycles = this.FindCycles();
+            var cycles = this.FindCyclesSnapshot(this.GetGraphSnapshot());
             foreach (var cycle in cycles)
             {
                 var victim = this.SelectVictim(cycle);
@@ -116,7 +116,7 @@ public sealed class DeadlockDetector : IDisposable
     /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task RemoveWaitForAsync(string waitingTransaction, string holdingTransaction)
     {
-        if (string.IsNullOrEmpty(waitingTransaction) || string.IsNullOrEmpty(holdingTransaction))
+        if (string.IsNullOrEmpty(holdingTransaction))
         {
             return;
         }
@@ -126,8 +126,8 @@ public sealed class DeadlockDetector : IDisposable
         {
             if (this.waitForGraph.TryGetValue(waitingTransaction, out var dependencies))
             {
-                dependencies.Remove(holdingTransaction);
-                if (dependencies.Count == 0)
+                dependencies.TryRemove(holdingTransaction, out _);
+                if (dependencies.IsEmpty)
                 {
                     this.waitForGraph.TryRemove(waitingTransaction, out _);
                 }
@@ -155,7 +155,7 @@ public sealed class DeadlockDetector : IDisposable
             // Remove transaction from all dependency lists
             foreach (var kvp in this.waitForGraph)
             {
-                kvp.Value.Remove(transactionId);
+                kvp.Value.TryRemove(transactionId, out _);
             }
         }
         finally
@@ -192,74 +192,95 @@ public sealed class DeadlockDetector : IDisposable
 
         _ = Task.Run(async () =>
         {
+            // snapshot graph under lock, then release early
+            Dictionary<string, List<string>> snapshot;
             await this.graphLock.WaitAsync().ConfigureAwait(false);
             try
             {
-                var cycles = this.FindCycles();
-                foreach (var cycle in cycles)
-                {
-                    var victim = this.SelectVictim(cycle);
-                    this.OnDeadlockDetected(new DeadlockEventArgs(victim, cycle));
-                }
+                snapshot = this.GetGraphSnapshot();
             }
             finally
             {
                 this.graphLock.Release();
             }
+
+            var cycles = this.FindCyclesSnapshot(snapshot);
+            foreach (var cycle in cycles)
+            {
+                var victim = this.SelectVictim(cycle);
+                this.OnDeadlockDetected(new DeadlockEventArgs(victim, cycle));
+            }
         });
     }
 
-    private List<List<string>> FindCycles()
+    // Create a snapshot of the current wait-for graph for cycle detection
+    private Dictionary<string, List<string>> GetGraphSnapshot()
+    {
+        return this.waitForGraph.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.Keys.ToList());
+    }
+
+    // Perform cycle detection on a provided snapshot
+    private List<List<string>> FindCyclesSnapshot(Dictionary<string, List<string>> graph)
     {
         var cycles = new List<List<string>>();
-        var visited = new HashSet<string>();
-        var recursionStack = new HashSet<string>();
+        var globalVisited = new HashSet<string>();
 
-        foreach (var node in this.waitForGraph.Keys)
+        foreach (var node in graph.Keys)
         {
-            if (!visited.Contains(node))
+            if (!globalVisited.Contains(node))
             {
+                var recursionStack = new HashSet<string>();
                 var path = new List<string>();
-                this.DFS(node, visited, recursionStack, path, cycles);
+                this.DFS(node, globalVisited, recursionStack, path, graph, cycles);
             }
         }
 
         return cycles;
     }
 
-    private bool DFS(string node, HashSet<string> visited, HashSet<string> recursionStack, List<string> path, List<List<string>> cycles)
+    // DFS helper for snapshot-based cycle detection
+    private void DFS(
+        string node,
+        HashSet<string> globalVisited,
+        HashSet<string> recursionStack,
+        List<string> path,
+        Dictionary<string, List<string>> graph,
+        List<List<string>> cycles)
     {
-        visited.Add(node);
+        globalVisited.Add(node);
         recursionStack.Add(node);
         path.Add(node);
 
-        if (this.waitForGraph.TryGetValue(node, out var neighbors))
+        if (graph.TryGetValue(node, out var neighbors))
         {
             foreach (var neighbor in neighbors)
             {
-                if (!visited.Contains(neighbor))
+                if (!globalVisited.Contains(neighbor))
                 {
-                    if (this.DFS(neighbor, visited, recursionStack, path, cycles))
-                    {
-                        return true;
-                    }
+                    this.DFS(neighbor, globalVisited, recursionStack, path, graph, cycles);
                 }
                 else if (recursionStack.Contains(neighbor))
                 {
                     // Found a cycle
-                    var cycleStart = path.IndexOf(neighbor);
-                    if (cycleStart >= 0)
+                    var start = path.IndexOf(neighbor);
+                    if (start >= 0)
                     {
-                        var cycle = path.Skip(cycleStart).ToList();
-                        cycles.Add(cycle);
+                        var cycle = path.Skip(start).ToList();
+
+                        // Only add if we haven't seen this cycle before
+                        if (!cycles.Exists(c => c.SequenceEqual(cycle)))
+                        {
+                            cycles.Add(cycle);
+                        }
                     }
                 }
             }
         }
 
-        path.RemoveAt(path.Count - 1);
         recursionStack.Remove(node);
-        return false;
+        path.RemoveAt(path.Count - 1);
     }
 
     private string SelectVictim(List<string> cycle)

@@ -271,6 +271,7 @@ public interface IStorageEngine
   - Other levels: No read locks, but may block on write locks
 - **Lock Upgrades**: Read locks can be upgraded to write locks
 - **Queue Management**: Pending write requests block new read requests to prevent starvation
+- **Lock Re-acquisition**: Transactions can re-acquire read locks they already hold without blocking
 
 ### Version Manager (MVCC Implementation)
 

@@ -190,17 +190,39 @@ public class WALTests : IDisposable
         this.wal.Dispose();
         this.storageEngine.Dispose();
 
-        // Corrupt the checksum in the log file
-        using (var stream = new FileStream(
-                   this.testFilePath,
-                   FileMode.Open,
-                   FileAccess.ReadWrite,
-                   FileShare.None))
+        // Give the OS time to release file handles
+        await Task.Delay(100);
+
+        // Corrupt the checksum in the log file with retry logic
+        Exception? lastException = null;
+        for (int retry = 0; retry < 3; retry++)
         {
-            stream.Seek(-1, SeekOrigin.End);
-            var current = stream.ReadByte();
-            stream.Seek(-1, SeekOrigin.End);
-            stream.WriteByte((byte)(current ^ 0xFF));
+            try
+            {
+                using (var stream = new FileStream(
+                    this.testFilePath,
+                    FileMode.Open,
+                    FileAccess.ReadWrite,
+                    FileShare.None))
+                {
+                    stream.Seek(-1, SeekOrigin.End);
+                    var current = stream.ReadByte();
+                    stream.Seek(-1, SeekOrigin.End);
+                    stream.WriteByte((byte)(current ^ 0xFF));
+                }
+
+                break;
+            }
+            catch (IOException ex) when (retry < 2)
+            {
+                lastException = ex;
+                await Task.Delay(100);
+            }
+        }
+
+        if (lastException != null)
+        {
+            throw new InvalidOperationException("Could not open file for corruption after retries", lastException);
         }
 
         // Recreate WAL to read corrupted data
