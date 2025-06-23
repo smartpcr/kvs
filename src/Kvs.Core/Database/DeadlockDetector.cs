@@ -116,7 +116,7 @@ public sealed class DeadlockDetector : IDisposable
     /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task RemoveWaitForAsync(string waitingTransaction, string holdingTransaction)
     {
-        if (string.IsNullOrEmpty(holdingTransaction))
+        if (string.IsNullOrEmpty(waitingTransaction) || string.IsNullOrEmpty(holdingTransaction))
         {
             return;
         }

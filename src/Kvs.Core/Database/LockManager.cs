@@ -76,7 +76,7 @@ public class LockManager : ILockManager
             throw new ArgumentException("Resource ID cannot be null or empty.", nameof(resourceId));
         }
 
-        var resourceLock = this.resourceLocks.GetOrAdd(resourceId, id => new ResourceLock(id));
+        var resourceLock = this.resourceLocks.GetOrAdd(resourceId, id => new ResourceLock(id, this.deadlockDetector));
 
         using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
         {
@@ -156,30 +156,17 @@ public class LockManager : ILockManager
             throw new ArgumentException("Resource ID cannot be null or empty.", nameof(resourceId));
         }
 
-        var resourceLock = this.resourceLocks.GetOrAdd(resourceId, id => new ResourceLock(id));
+        var resourceLock = this.resourceLocks.GetOrAdd(resourceId, id => new ResourceLock(id, this.deadlockDetector));
 
         using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
         {
             cts.CancelAfter(timeout);
             try
             {
-                // Add to wait-for graph before trying to acquire
-                var currentHolders = resourceLock.GetCurrentHolders();
-                foreach (var holder in currentHolders.Where(h => h != transactionId))
-                {
-                    await this.deadlockDetector.AddWaitForAsync(transactionId, holder).ConfigureAwait(false);
-                }
-
                 var acquired = await resourceLock.AcquireWriteLockAsync(transactionId, cts.Token).ConfigureAwait(false);
 
                 if (acquired)
                 {
-                    // Remove from wait-for graph after acquiring
-                    foreach (var holder in currentHolders)
-                    {
-                        await this.deadlockDetector.RemoveWaitForAsync(transactionId, holder).ConfigureAwait(false);
-                    }
-
                     // Track the lock for this transaction
                     var locks = this.transactionLocks.GetOrAdd(transactionId, id => new HashSet<string>());
                     lock (locks)
@@ -192,13 +179,6 @@ public class LockManager : ILockManager
             }
             catch (OperationCanceledException)
             {
-                // Remove from wait-for graph if we timeout
-                var currentHolders = resourceLock.GetCurrentHolders();
-                foreach (var holder in currentHolders)
-                {
-                    await this.deadlockDetector.RemoveWaitForAsync(transactionId, holder).ConfigureAwait(false);
-                }
-
                 return false;
             }
         }
@@ -388,35 +368,11 @@ public class LockManager : ILockManager
             cts.CancelAfter(timeout);
             try
             {
-                // Add to wait-for graph before trying to upgrade
-                var currentHolders = resourceLock.GetCurrentHolders();
-                foreach (var holder in currentHolders.Where(h => h != transactionId))
-                {
-                    await this.deadlockDetector.AddWaitForAsync(transactionId, holder).ConfigureAwait(false);
-                }
-
                 var upgraded = await resourceLock.UpgradeLockAsync(transactionId, cts.Token).ConfigureAwait(false);
-
-                if (upgraded)
-                {
-                    // Remove from wait-for graph after upgrading
-                    foreach (var holder in currentHolders)
-                    {
-                        await this.deadlockDetector.RemoveWaitForAsync(transactionId, holder).ConfigureAwait(false);
-                    }
-                }
-
                 return upgraded;
             }
             catch (OperationCanceledException)
             {
-                // Remove from wait-for graph if we timeout
-                var currentHolders = resourceLock.GetCurrentHolders();
-                foreach (var holder in currentHolders)
-                {
-                    await this.deadlockDetector.RemoveWaitForAsync(transactionId, holder).ConfigureAwait(false);
-                }
-
                 return false;
             }
         }
@@ -571,6 +527,7 @@ public class LockManager : ILockManager
     private sealed class ResourceLock : IDisposable
     {
         private readonly string resourceId;
+        private readonly DeadlockDetector deadlockDetector;
         private readonly SemaphoreSlim lockSemaphore;
         private readonly HashSet<string> readLockHolders;
 #if NET8_0_OR_GREATER
@@ -581,9 +538,10 @@ public class LockManager : ILockManager
         private readonly Queue<LockRequest> waitQueue;
         private bool disposed;
 
-        public ResourceLock(string resourceId)
+        public ResourceLock(string resourceId, DeadlockDetector deadlockDetector)
         {
             this.resourceId = resourceId;
+            this.deadlockDetector = deadlockDetector;
             this.lockSemaphore = new SemaphoreSlim(1, 1);
             this.readLockHolders = new HashSet<string>();
             this.waitQueue = new Queue<LockRequest>();
@@ -598,34 +556,82 @@ public class LockManager : ILockManager
         public async Task<bool> AcquireReadLockAsync(string transactionId, CancellationToken cancellationToken)
         {
             await this.lockSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            bool semaphoreReleased = false;
             try
             {
                 // Can acquire read lock if no write lock or if we hold the write lock
                 if (this.writeLockHolder == null || this.writeLockHolder == transactionId)
                 {
                     this.readLockHolders.Add(transactionId);
+
+                    // Always release the semaphore after updating state
+                    this.lockSemaphore.Release();
+                    semaphoreReleased = true;
                     return true;
                 }
 
-                // Need to wait
+                // Need to wait - add to wait-for graph
+                var currentWriteHolder = this.writeLockHolder;
+                await this.deadlockDetector.AddWaitForAsync(transactionId, currentWriteHolder).ConfigureAwait(false);
+
                 var tcs = new TaskCompletionSource<bool>();
                 var request = new LockRequest(transactionId, LockType.Read, tcs);
                 this.waitQueue.Enqueue(request);
 
                 // Register cancellation
-                cancellationToken.Register(() => tcs.TrySetCanceled());
+                cancellationToken.Register(() =>
+                {
+                    tcs.TrySetCanceled();
 
-                return await tcs.Task.ConfigureAwait(false);
-            }
-            finally
-            {
+                    // Remove from wait-for graph on cancellation
+                    // Use Task.Run to avoid blocking the cancellation callback
+                    Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await this.deadlockDetector.RemoveWaitForAsync(transactionId, currentWriteHolder).ConfigureAwait(false);
+                        }
+                        catch
+                        {
+                            // Ignore errors during cleanup
+                        }
+                    });
+                });
+
+                // Release lock while waiting
                 this.lockSemaphore.Release();
+                semaphoreReleased = true;
+                try
+                {
+                    var result = await tcs.Task.ConfigureAwait(false);
+
+                    // Remove from wait-for graph after acquiring
+                    await this.deadlockDetector.RemoveWaitForAsync(transactionId, currentWriteHolder).ConfigureAwait(false);
+                    return result;
+                }
+                catch
+                {
+                    // Ensure we remove from wait-for graph on any error
+                    await this.deadlockDetector.RemoveWaitForAsync(transactionId, currentWriteHolder).ConfigureAwait(false);
+                    throw;
+                }
+            }
+            catch
+            {
+                // Only release if we haven't already released it
+                if (!semaphoreReleased)
+                {
+                    this.lockSemaphore.Release();
+                }
+
+                throw;
             }
         }
 
         public async Task<bool> AcquireWriteLockAsync(string transactionId, CancellationToken cancellationToken)
         {
             await this.lockSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            bool semaphoreReleased = false;
             try
             {
                 // Can acquire write lock if no locks or if we are the only lock holder
@@ -634,33 +640,97 @@ public class LockManager : ILockManager
                      (this.readLockHolders.Count == 0 || this.readLockHolders.Contains(transactionId))))
                 {
                     this.writeLockHolder = transactionId;
+
+                    // Always release the semaphore after updating state
+                    this.lockSemaphore.Release();
+                    semaphoreReleased = true;
                     return true;
                 }
 
-                // Need to wait
+                // Need to wait - add to wait-for graph for all current holders
+                var currentHolders = this.GetCurrentHolders();
+                foreach (var holder in currentHolders.Where(h => h != transactionId))
+                {
+                    await this.deadlockDetector.AddWaitForAsync(transactionId, holder).ConfigureAwait(false);
+                }
+
                 var tcs = new TaskCompletionSource<bool>();
                 var request = new LockRequest(transactionId, LockType.Write, tcs);
                 this.waitQueue.Enqueue(request);
 
                 // Register cancellation
-                cancellationToken.Register(() => tcs.TrySetCanceled());
+                var holdersToRemove = currentHolders.Where(h => h != transactionId).ToList();
+                cancellationToken.Register(() =>
+                {
+                    tcs.TrySetCanceled();
 
-                return await tcs.Task.ConfigureAwait(false);
-            }
-            finally
-            {
+                    // Remove from wait-for graph on cancellation
+                    // Use Task.Run to avoid blocking the cancellation callback
+                    Task.Run(async () =>
+                    {
+                        try
+                        {
+                            foreach (var holder in holdersToRemove)
+                            {
+                                await this.deadlockDetector.RemoveWaitForAsync(transactionId, holder).ConfigureAwait(false);
+                            }
+                        }
+                        catch
+                        {
+                            // Ignore errors during cleanup
+                        }
+                    });
+                });
+
+                // Release lock while waiting
                 this.lockSemaphore.Release();
+                semaphoreReleased = true;
+                try
+                {
+                    var result = await tcs.Task.ConfigureAwait(false);
+
+                    // Remove from wait-for graph after acquiring
+                    foreach (var holder in holdersToRemove)
+                    {
+                        await this.deadlockDetector.RemoveWaitForAsync(transactionId, holder).ConfigureAwait(false);
+                    }
+
+                    return result;
+                }
+                catch
+                {
+                    // Ensure we remove from wait-for graph on any error
+                    foreach (var holder in holdersToRemove)
+                    {
+                        await this.deadlockDetector.RemoveWaitForAsync(transactionId, holder).ConfigureAwait(false);
+                    }
+
+                    throw;
+                }
+            }
+            catch
+            {
+                // Only release if we haven't already released it
+                if (!semaphoreReleased)
+                {
+                    this.lockSemaphore.Release();
+                }
+
+                throw;
             }
         }
 
         public async Task<bool> UpgradeLockAsync(string transactionId, CancellationToken cancellationToken)
         {
             await this.lockSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            bool semaphoreReleased = false;
             try
             {
                 // Must hold a read lock to upgrade
                 if (!this.readLockHolders.Contains(transactionId))
                 {
+                    this.lockSemaphore.Release();
+                    semaphoreReleased = true;
                     return false;
                 }
 
@@ -669,22 +739,82 @@ public class LockManager : ILockManager
                 {
                     this.readLockHolders.Remove(transactionId);
                     this.writeLockHolder = transactionId;
+
+                    // Always release the semaphore after updating state
+                    this.lockSemaphore.Release();
+                    semaphoreReleased = true;
                     return true;
                 }
 
-                // Need to wait
+                // Need to wait - add to wait-for graph for other read lock holders
+                var otherHolders = this.readLockHolders.Where(h => h != transactionId).ToList();
+                foreach (var holder in otherHolders)
+                {
+                    await this.deadlockDetector.AddWaitForAsync(transactionId, holder).ConfigureAwait(false);
+                }
+
                 var tcs = new TaskCompletionSource<bool>();
                 var request = new LockRequest(transactionId, LockType.Write, tcs, isUpgrade: true);
                 this.waitQueue.Enqueue(request);
 
                 // Register cancellation
-                cancellationToken.Register(() => tcs.TrySetCanceled());
+                cancellationToken.Register(() =>
+                {
+                    tcs.TrySetCanceled();
 
-                return await tcs.Task.ConfigureAwait(false);
-            }
-            finally
-            {
+                    // Remove from wait-for graph on cancellation
+                    // Use Task.Run to avoid blocking the cancellation callback
+                    Task.Run(async () =>
+                    {
+                        try
+                        {
+                            foreach (var holder in otherHolders)
+                            {
+                                await this.deadlockDetector.RemoveWaitForAsync(transactionId, holder).ConfigureAwait(false);
+                            }
+                        }
+                        catch
+                        {
+                            // Ignore errors during cleanup
+                        }
+                    });
+                });
+
+                // Release lock while waiting
                 this.lockSemaphore.Release();
+                semaphoreReleased = true;
+                try
+                {
+                    var result = await tcs.Task.ConfigureAwait(false);
+
+                    // Remove from wait-for graph after acquiring
+                    foreach (var holder in otherHolders)
+                    {
+                        await this.deadlockDetector.RemoveWaitForAsync(transactionId, holder).ConfigureAwait(false);
+                    }
+
+                    return result;
+                }
+                catch
+                {
+                    // Ensure we remove from wait-for graph on any error
+                    foreach (var holder in otherHolders)
+                    {
+                        await this.deadlockDetector.RemoveWaitForAsync(transactionId, holder).ConfigureAwait(false);
+                    }
+
+                    throw;
+                }
+            }
+            catch
+            {
+                // Only release if we haven't already released it
+                if (!semaphoreReleased)
+                {
+                    this.lockSemaphore.Release();
+                }
+
+                throw;
             }
         }
 
@@ -794,6 +924,7 @@ public class LockManager : ILockManager
 
         public string[] GetCurrentHolders()
         {
+            // Must be called while holding the lockSemaphore
             var holders = new HashSet<string>();
 
             if (this.writeLockHolder != null)

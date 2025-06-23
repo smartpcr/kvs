@@ -26,7 +26,12 @@
       "Bash(true)",
       "Bash(sed:*)",
       "Bash(echo \"Exit code: $?\")",
-      "Bash(dotnet new:*)"
+      "Bash(dotnet new:*)",
+      "Bash(timeout 60 dotnet test:*)",
+      "Bash(timeout 30 dotnet test --filter \"FullyQualifiedName~StorageEngineTests\" --no-build --verbosity normal 2 >& 1)",
+      "Bash(timeout 30 dotnet test:*)",
+      "Bash(timeout 20 dotnet test:*)",
+      "Bash(timeout:*)"
     ],
     "deny": []
   }

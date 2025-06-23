@@ -79,6 +79,25 @@ public class Collection<T> : ICollection<T>
     /// <returns>A task that represents the asynchronous operation. The task result contains the document ID.</returns>
     public async Task<string> InsertAsync(T document)
     {
+#if NET8_0_OR_GREATER
+        return await this.InsertAsync(document, null).ConfigureAwait(false);
+#else
+        return await this.InsertAsync(document, string.Empty).ConfigureAwait(false);
+#endif
+    }
+
+    /// <summary>
+    /// Inserts a document into the collection with optional transaction context.
+    /// </summary>
+    /// <param name="document">The document to insert.</param>
+    /// <param name="transactionId">The transaction ID if called from within a transaction.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result contains the document ID.</returns>
+#if NET8_0_OR_GREATER
+    internal async Task<string> InsertAsync(T document, string? transactionId)
+#else
+    internal async Task<string> InsertAsync(T document, string transactionId)
+#endif
+    {
         if (document == null)
         {
             throw new ArgumentNullException(nameof(document));
@@ -101,24 +120,29 @@ public class Collection<T> : ICollection<T>
 
             await this.UpdateIndexesAsync(doc, null).ConfigureAwait(false);
 
-            var entry = new TransactionLogEntry
+            // Only write to WAL and version manager if not called from a transaction
+            // Transactions handle their own WAL entries and version management
+            if (string.IsNullOrEmpty(transactionId))
             {
-                TransactionId = Guid.NewGuid().ToString(),
-                Type = TransactionLogEntryType.Insert,
-                CollectionName = this.name,
-                Key = doc.Id,
-                Data = this.serializer.Serialize(doc),
-                Timestamp = DateTime.UtcNow
-            };
+                var entry = new TransactionLogEntry
+                {
+                    TransactionId = Guid.NewGuid().ToString(),
+                    Type = TransactionLogEntryType.Insert,
+                    CollectionName = this.name,
+                    Key = doc.Id,
+                    Data = this.serializer.Serialize(doc),
+                    Timestamp = DateTime.UtcNow
+                };
 
-            var wal = this.database.GetDatabaseWAL();
-            await wal.WriteEntryAsync(entry).ConfigureAwait(false);
+                var wal = this.database.GetDatabaseWAL();
+                await wal.WriteEntryAsync(entry).ConfigureAwait(false);
 
-            // Add to version manager for MVCC
-            if (this.database is ITransactionContext transactionContext)
-            {
-                var versionManager = transactionContext.VersionManager;
-                versionManager.AddVersion($"{this.name}/{doc.Id}", doc, entry.TransactionId, entry.Timestamp);
+                // Add to version manager for MVCC
+                if (this.database is ITransactionContext transactionContext)
+                {
+                    var versionManager = transactionContext.VersionManager;
+                    versionManager.AddVersion($"{this.name}/{doc.Id}", doc, entry.TransactionId, entry.Timestamp);
+                }
             }
 
             Interlocked.Increment(ref this.documentCount);
@@ -161,6 +185,26 @@ public class Collection<T> : ICollection<T>
     /// <returns>A task that represents the asynchronous operation. The task result indicates whether the update was successful.</returns>
     public async Task<bool> UpdateAsync(string id, T document)
     {
+#if NET8_0_OR_GREATER
+        return await this.UpdateAsync(id, document, null).ConfigureAwait(false);
+#else
+        return await this.UpdateAsync(id, document, string.Empty).ConfigureAwait(false);
+#endif
+    }
+
+    /// <summary>
+    /// Updates a document in the collection with optional transaction context.
+    /// </summary>
+    /// <param name="id">The ID of the document to update.</param>
+    /// <param name="document">The updated document.</param>
+    /// <param name="transactionId">The transaction ID if called from within a transaction.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result indicates whether the update was successful.</returns>
+#if NET8_0_OR_GREATER
+    internal async Task<bool> UpdateAsync(string id, T document, string? transactionId)
+#else
+    internal async Task<bool> UpdateAsync(string id, T document, string transactionId)
+#endif
+    {
         if (string.IsNullOrEmpty(id))
         {
             throw new ArgumentException("Document ID cannot be null or empty.", nameof(id));
@@ -190,25 +234,30 @@ public class Collection<T> : ICollection<T>
 
             await this.UpdateIndexesAsync(newDoc, existingDoc).ConfigureAwait(false);
 
-            var entry = new TransactionLogEntry
+            // Only write to WAL and version manager if not called from a transaction
+            // Transactions handle their own WAL entries and version management
+            if (string.IsNullOrEmpty(transactionId))
             {
-                TransactionId = Guid.NewGuid().ToString(),
-                Type = TransactionLogEntryType.Update,
-                CollectionName = this.name,
-                Key = id,
-                Data = this.serializer.Serialize(newDoc),
-                OldData = this.serializer.Serialize(existingDoc),
-                Timestamp = DateTime.UtcNow
-            };
+                var entry = new TransactionLogEntry
+                {
+                    TransactionId = Guid.NewGuid().ToString(),
+                    Type = TransactionLogEntryType.Update,
+                    CollectionName = this.name,
+                    Key = id,
+                    Data = this.serializer.Serialize(newDoc),
+                    OldData = this.serializer.Serialize(existingDoc),
+                    Timestamp = DateTime.UtcNow
+                };
 
-            var wal = this.database.GetDatabaseWAL();
-            await wal.WriteEntryAsync(entry).ConfigureAwait(false);
+                var wal = this.database.GetDatabaseWAL();
+                await wal.WriteEntryAsync(entry).ConfigureAwait(false);
 
-            // Add to version manager for MVCC
-            if (this.database is ITransactionContext transactionContext)
-            {
-                var versionManager = transactionContext.VersionManager;
-                versionManager.AddVersion($"{this.name}/{id}", newDoc, entry.TransactionId, entry.Timestamp);
+                // Add to version manager for MVCC
+                if (this.database is ITransactionContext transactionContext)
+                {
+                    var versionManager = transactionContext.VersionManager;
+                    versionManager.AddVersion($"{this.name}/{id}", newDoc, entry.TransactionId, entry.Timestamp);
+                }
             }
 
             return true;
@@ -225,6 +274,25 @@ public class Collection<T> : ICollection<T>
     /// <param name="id">The ID of the document to delete.</param>
     /// <returns>A task that represents the asynchronous operation. The task result indicates whether the deletion was successful.</returns>
     public async Task<bool> DeleteAsync(string id)
+    {
+#if NET8_0_OR_GREATER
+        return await this.DeleteAsync(id, null).ConfigureAwait(false);
+#else
+        return await this.DeleteAsync(id, string.Empty).ConfigureAwait(false);
+#endif
+    }
+
+    /// <summary>
+    /// Deletes a document from the collection with optional transaction context.
+    /// </summary>
+    /// <param name="id">The ID of the document to delete.</param>
+    /// <param name="transactionId">The transaction ID if called from within a transaction.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result indicates whether the deletion was successful.</returns>
+#if NET8_0_OR_GREATER
+    internal async Task<bool> DeleteAsync(string id, string? transactionId)
+#else
+    internal async Task<bool> DeleteAsync(string id, string transactionId)
+#endif
     {
         if (string.IsNullOrEmpty(id))
         {
@@ -248,24 +316,29 @@ public class Collection<T> : ICollection<T>
 
             await this.RemoveFromIndexesAsync(existingDoc).ConfigureAwait(false);
 
-            var entry = new TransactionLogEntry
+            // Only write to WAL and version manager if not called from a transaction
+            // Transactions handle their own WAL entries and version management
+            if (string.IsNullOrEmpty(transactionId))
             {
-                TransactionId = Guid.NewGuid().ToString(),
-                Type = TransactionLogEntryType.Delete,
-                CollectionName = this.name,
-                Key = id,
-                OldData = this.serializer.Serialize(existingDoc),
-                Timestamp = DateTime.UtcNow
-            };
+                var entry = new TransactionLogEntry
+                {
+                    TransactionId = Guid.NewGuid().ToString(),
+                    Type = TransactionLogEntryType.Delete,
+                    CollectionName = this.name,
+                    Key = id,
+                    OldData = this.serializer.Serialize(existingDoc),
+                    Timestamp = DateTime.UtcNow
+                };
 
-            var wal = this.database.GetDatabaseWAL();
-            await wal.WriteEntryAsync(entry).ConfigureAwait(false);
+                var wal = this.database.GetDatabaseWAL();
+                await wal.WriteEntryAsync(entry).ConfigureAwait(false);
 
-            // Mark as deleted in version manager for MVCC
-            if (this.database is ITransactionContext transactionContext)
-            {
-                var versionManager = transactionContext.VersionManager;
-                versionManager.MarkDeleted($"{this.name}/{id}", entry.TransactionId, entry.Timestamp);
+                // Mark as deleted in version manager for MVCC
+                if (this.database is ITransactionContext transactionContext)
+                {
+                    var versionManager = transactionContext.VersionManager;
+                    versionManager.MarkDeleted($"{this.name}/{id}", entry.TransactionId, entry.Timestamp);
+                }
             }
 
             Interlocked.Decrement(ref this.documentCount);

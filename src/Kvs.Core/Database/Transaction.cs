@@ -40,6 +40,7 @@ public class Transaction : ITransaction
     private readonly object stateLock = new object();
     private readonly ManualResetEventSlim abortedEvent = new ManualResetEventSlim(false);
     private readonly CancellationTokenSource abortCancellationSource = new CancellationTokenSource();
+    private bool isDeadlockVictim;
 
     /// <summary>
     /// Gets the unique identifier for the transaction.
@@ -80,6 +81,17 @@ public class Transaction : ITransaction
                     this.abortCancellationSource.Cancel();
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Marks this transaction as a deadlock victim.
+    /// </summary>
+    internal void MarkAsDeadlockVictim()
+    {
+        lock (this.stateLock)
+        {
+            this.isDeadlockVictim = true;
         }
     }
 
@@ -232,8 +244,9 @@ public class Transaction : ITransaction
                     }
                 }
 
-                // Check read cache
-                if (this.readCache.TryGetValue(key, out var cachedValue))
+                // Check read cache only for repeatable read and serializable
+                // Read committed should always see the latest committed version
+                if (this.isolationLevel != IsolationLevel.ReadCommitted && this.readCache.TryGetValue(key, out var cachedValue))
                 {
                     return (T)cachedValue;
                 }
@@ -241,8 +254,9 @@ public class Transaction : ITransaction
                 // Read from storage with isolation level awareness
                 var result = await this.GetWithIsolationAsync<T>(key).ConfigureAwait(false);
 
-                // Cache the result only if it's not null
-                if (result != null)
+                // Cache the result only if it's not null and not ReadCommitted
+                // Read committed should not cache to allow seeing newly committed data
+                if (result != null && this.isolationLevel != IsolationLevel.ReadCommitted)
                 {
                     this.readCache[key] = result;
                 }
@@ -417,6 +431,12 @@ public class Transaction : ITransaction
 
             var wal = this.database.GetDatabaseWAL();
             await wal.WriteEntryAsync(entry).ConfigureAwait(false);
+
+            // Update the read cache to reflect the new value within this transaction
+            if (this.isolationLevel != IsolationLevel.ReadCommitted)
+            {
+                this.readCache[key] = value!;
+            }
         }
         finally
         {
@@ -449,7 +469,7 @@ public class Transaction : ITransaction
             using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(this.abortCancellationSource.Token))
             {
                 linkedCts.CancelAfter(TimeSpan.FromSeconds(30));
-                lockAcquired = await lockManager.AcquireWriteLockAsync(this.transactionId, key, TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+                lockAcquired = await lockManager.AcquireWriteLockAsync(this.transactionId, key, TimeSpan.FromSeconds(30), linkedCts.Token).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)
@@ -573,6 +593,11 @@ public class Transaction : ITransaction
         // Check if aborted (could be set by deadlock detector)
         if (this.state == TransactionState.Aborted)
         {
+            if (this.isDeadlockVictim)
+            {
+                throw new DeadlockException(this.transactionId, new[] { this.transactionId });
+            }
+
             throw new TransactionAbortedException(this.transactionId);
         }
 
@@ -766,9 +791,19 @@ public class Transaction : ITransaction
                 {
                     // Check if document exists
                     var existing = await collection.FindByIdAsync(documentId).ConfigureAwait(false);
-                    if (existing != null)
+                    if (existing != null && collection is Collection<Document> internalCollection)
+                    {
+                        await internalCollection.UpdateAsync(documentId, doc, this.transactionId).ConfigureAwait(false);
+                    }
+                    else if (existing != null)
                     {
                         await collection.UpdateAsync(documentId, doc).ConfigureAwait(false);
+                    }
+                    else if (collection is Collection<Document> insertColl)
+                    {
+                        // If it doesn't exist, insert it
+                        doc.Id = documentId;
+                        await insertColl.InsertAsync(doc, this.transactionId).ConfigureAwait(false);
                     }
                     else
                     {
@@ -787,7 +822,14 @@ public class Transaction : ITransaction
                 break;
 
             case TransactionOperationType.Delete:
-                await collection.DeleteAsync(documentId).ConfigureAwait(false);
+                if (collection is Collection<Document> deleteColl)
+                {
+                    await deleteColl.DeleteAsync(documentId, this.transactionId).ConfigureAwait(false);
+                }
+                else
+                {
+                    await collection.DeleteAsync(documentId).ConfigureAwait(false);
+                }
 
                 // Mark as deleted in version manager
                 if (versionManager != null)
@@ -1031,9 +1073,9 @@ public class Transaction : ITransaction
     }
 
 #if NET8_0_OR_GREATER
-    private async void OnTimeout(object? state)
+    private void OnTimeout(object? state)
 #else
-    private async void OnTimeout(object state)
+    private void OnTimeout(object state)
 #endif
     {
         lock (this.stateLock)
@@ -1044,6 +1086,7 @@ public class Transaction : ITransaction
             {
                 this.state = TransactionState.Aborted;
                 this.abortedEvent.Set();
+                this.abortCancellationSource.Cancel();
             }
             else
             {
@@ -1052,15 +1095,18 @@ public class Transaction : ITransaction
             }
         }
 
-        // Rollback outside of lock to avoid deadlock
-        try
+        // Schedule rollback on ThreadPool to avoid blocking timer thread
+        Task.Run(async () =>
         {
-            await this.RollbackAsync().ConfigureAwait(false);
-        }
-        catch
-        {
-            // Ignore errors during timeout rollback
-        }
+            try
+            {
+                await this.RollbackAsync().ConfigureAwait(false);
+            }
+            catch
+            {
+                // Ignore errors during timeout rollback
+            }
+        });
     }
 
     private void ThrowIfDisposed()
@@ -1079,6 +1125,11 @@ public class Transaction : ITransaction
             if (this.state == TransactionState.Aborted)
             {
                 // Check if this was a deadlock victim to throw appropriate exception
+                if (this.isDeadlockVictim)
+                {
+                    throw new DeadlockException(this.transactionId, new[] { this.transactionId });
+                }
+
                 throw new TransactionAbortedException(this.transactionId);
             }
 

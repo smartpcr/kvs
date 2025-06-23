@@ -500,8 +500,11 @@ public class Database : IDatabase, ITransactionContext
         // Abort the victim transaction
         if (this.TryGetTransaction(e.Victim, out var victimTransaction))
         {
-            // Mark as aborted before rollback to prevent further operations
-            victimTransaction!.State = TransactionState.Aborted;
+            // Mark as deadlock victim first
+            victimTransaction!.MarkAsDeadlockVictim();
+
+            // Then mark as aborted to prevent further operations
+            victimTransaction.State = TransactionState.Aborted;
 
             // The transaction will detect it's been aborted and throw DeadlockException
             // We don't need to call RollbackAsync here as it will be called when the
@@ -518,7 +521,10 @@ public class Database : IDatabase, ITransactionContext
         // The lock manager detected a deadlock - abort the victim transaction
         if (this.activeTransactions.TryGetValue(e.Victim, out var victimTransaction))
         {
-            // Mark as aborted before rollback to prevent further operations
+            // Mark as deadlock victim first
+            victimTransaction.MarkAsDeadlockVictim();
+
+            // Then mark as aborted to prevent further operations
             victimTransaction.State = TransactionState.Aborted;
 
             // The transaction will detect it's been aborted and throw DeadlockException
