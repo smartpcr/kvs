@@ -92,6 +92,9 @@ public class Transaction : ITransaction
         lock (this.stateLock)
         {
             this.isDeadlockVictim = true;
+            this.state = TransactionState.Aborted;
+            this.abortedEvent.Set();
+            this.abortCancellationSource.Cancel();
         }
     }
 

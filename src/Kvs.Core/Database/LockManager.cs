@@ -560,19 +560,38 @@ public class LockManager : ILockManager
             try
             {
                 // Can acquire read lock if no write lock or if we hold the write lock
+                // AND there are no pending write/upgrade requests
                 if (this.writeLockHolder == null || this.writeLockHolder == transactionId)
                 {
-                    this.readLockHolders.Add(transactionId);
+                    // Check if there are any pending write/upgrade requests
+                    var hasPendingWrites = this.waitQueue.Any(req => req.LockType == LockType.Write || req.IsUpgrade);
 
-                    // Always release the semaphore after updating state
-                    this.lockSemaphore.Release();
-                    semaphoreReleased = true;
-                    return true;
+                    if (!hasPendingWrites)
+                    {
+                        this.readLockHolders.Add(transactionId);
+
+                        // Always release the semaphore after updating state
+                        this.lockSemaphore.Release();
+                        semaphoreReleased = true;
+                        return true;
+                    }
                 }
 
                 // Need to wait - add to wait-for graph
                 var currentWriteHolder = this.writeLockHolder;
-                await this.deadlockDetector.AddWaitForAsync(transactionId, currentWriteHolder).ConfigureAwait(false);
+                if (currentWriteHolder != null)
+                {
+                    await this.deadlockDetector.AddWaitForAsync(transactionId, currentWriteHolder).ConfigureAwait(false);
+                }
+                else
+                {
+                    // If no write holder but pending writes, we're waiting for the first pending write/upgrade
+                    var firstPendingWrite = this.waitQueue.FirstOrDefault(req => req.LockType == LockType.Write || req.IsUpgrade);
+                    if (firstPendingWrite != null)
+                    {
+                        await this.deadlockDetector.AddWaitForAsync(transactionId, firstPendingWrite.TransactionId).ConfigureAwait(false);
+                    }
+                }
 
                 var tcs = new TaskCompletionSource<bool>();
                 var request = new LockRequest(transactionId, LockType.Read, tcs);
@@ -589,7 +608,18 @@ public class LockManager : ILockManager
                     {
                         try
                         {
-                            await this.deadlockDetector.RemoveWaitForAsync(transactionId, currentWriteHolder).ConfigureAwait(false);
+                            if (currentWriteHolder != null)
+                            {
+                                await this.deadlockDetector.RemoveWaitForAsync(transactionId, currentWriteHolder).ConfigureAwait(false);
+                            }
+                            else
+                            {
+                                var firstPendingWrite = this.waitQueue.FirstOrDefault(req => req.LockType == LockType.Write || req.IsUpgrade);
+                                if (firstPendingWrite != null)
+                                {
+                                    await this.deadlockDetector.RemoveWaitForAsync(transactionId, firstPendingWrite.TransactionId).ConfigureAwait(false);
+                                }
+                            }
                         }
                         catch
                         {
@@ -606,13 +636,37 @@ public class LockManager : ILockManager
                     var result = await tcs.Task.ConfigureAwait(false);
 
                     // Remove from wait-for graph after acquiring
-                    await this.deadlockDetector.RemoveWaitForAsync(transactionId, currentWriteHolder).ConfigureAwait(false);
+                    if (currentWriteHolder != null)
+                    {
+                        await this.deadlockDetector.RemoveWaitForAsync(transactionId, currentWriteHolder).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        var firstPendingWrite = this.waitQueue.FirstOrDefault(req => req.LockType == LockType.Write || req.IsUpgrade);
+                        if (firstPendingWrite != null)
+                        {
+                            await this.deadlockDetector.RemoveWaitForAsync(transactionId, firstPendingWrite.TransactionId).ConfigureAwait(false);
+                        }
+                    }
+
                     return result;
                 }
                 catch
                 {
                     // Ensure we remove from wait-for graph on any error
-                    await this.deadlockDetector.RemoveWaitForAsync(transactionId, currentWriteHolder).ConfigureAwait(false);
+                    if (currentWriteHolder != null)
+                    {
+                        await this.deadlockDetector.RemoveWaitForAsync(transactionId, currentWriteHolder).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        var firstPendingWrite = this.waitQueue.FirstOrDefault(req => req.LockType == LockType.Write || req.IsUpgrade);
+                        if (firstPendingWrite != null)
+                        {
+                            await this.deadlockDetector.RemoveWaitForAsync(transactionId, firstPendingWrite.TransactionId).ConfigureAwait(false);
+                        }
+                    }
+
                     throw;
                 }
             }

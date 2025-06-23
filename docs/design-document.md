@@ -5,7 +5,7 @@
 - **Version**: 1.1
 - **Date**: 2025-06-22
 - **Authors**: Development Team
-- **Status**: Phase 2 Complete
+- **Status**: Phase 3 Complete
 
 ## Table of Contents
 1. [Executive Summary](#executive-summary)
@@ -27,8 +27,8 @@
 
 KVS is a distributed NoSQL key-value store designed for high availability, strong consistency, and zero data loss. Built in C# with .NET multi-targeting support, it provides ACID transactions, automatic failover, and enterprise-grade reliability.
 
-### Implementation Status: Phase 2 Complete ✅
-**Current Status:** Core storage and data structures fully implemented and tested
+### Implementation Status: Phase 3 Complete ✅
+**Current Status:** Core storage, data structures, and database implementation with transactions fully implemented and tested
 
 **Phase 1 Complete** (81/81 tests passing):
 - ✅ **Storage Engine**: Complete with async I/O and multi-framework support
@@ -38,7 +38,7 @@ KVS is a distributed NoSQL key-value store designed for high availability, stron
 - ✅ **Serialization**: Binary serialization with type safety
 - ✅ **Documentation**: Complete XML documentation for all public members
 
-**Phase 2 Complete** (179/179 tests passing):
+**Phase 2 Complete** (98/98 tests passing):
 - ✅ **B-Tree Implementation**: Complete with full CRUD operations
 - ✅ **Node Management**: Split/merge operations with proper balancing
 - ✅ **Index Interface**: Async operations with IAsyncEnumerable support
@@ -47,6 +47,16 @@ KVS is a distributed NoSQL key-value store designed for high availability, stron
 - ✅ **HashIndex**: Hash-based indexing with O(1) average case operations
 - ✅ **LRU Cache**: In-memory caching with eviction policies
 - ✅ **Testing**: 100% test coverage with comprehensive edge cases
+
+**Phase 3 Complete** (81/81 tests passing):
+- ✅ **Database Core**: Main entry point with collection management
+- ✅ **Collection Management**: Document storage with CRUD operations
+- ✅ **Transaction Support**: Full ACID guarantees with isolation levels
+- ✅ **MVCC Implementation**: Version chains for concurrent access
+- ✅ **Deadlock Prevention**: Lock timeout and semaphore-based detection
+- ✅ **Lock Manager**: Two-phase locking with deadlock detection
+- ✅ **Version Cleanup**: Automatic removal of old versions
+- ✅ **Testing**: Comprehensive transaction and concurrency tests
 
 ### Key Features (Implemented)
 - **Storage Durability**: ACID-compliant WAL with fsync guarantees
@@ -238,19 +248,50 @@ public interface IStorageEngine
 
 ### Transaction Manager
 
-**Purpose**: Provides ACID transaction guarantees
+**Purpose**: Provides ACID transaction guarantees with hybrid locking/versioning approach
 
 **Features**:
-- **Isolation Levels**: Read Committed, Serializable
-- **Concurrency Control**: MVCC with timestamp ordering
-- **Deadlock Detection**: Wait-for graph analysis
+- **Isolation Levels**: Read Uncommitted, Read Committed, Repeatable Read, Serializable
+- **Concurrency Control**: Hybrid approach combining locking and MVCC
+- **Deadlock Detection**: Wait-for graph with cycle detection and victim selection
 - **Two-Phase Commit**: Distributed transaction coordination
+- **Lock Management**: Write locks for all modifications, read locks for Serializable only
 
 **Transaction Lifecycle**:
 1. Begin → Generate transaction ID and timestamp
-2. Operations → Record in WAL, acquire locks
-3. Prepare → Validate constraints, prepare commit
-4. Commit → Persist changes, release locks, notify replicas
+2. Operations → Record in WAL, acquire locks, track operations locally
+3. Prepare → Validate constraints, ensure all locks held
+4. Commit → Persist changes, add versions to version manager, release locks
+5. Cleanup → Release all locks, remove from active transactions
+
+**Locking Strategy**:
+- **Write Operations**: Always acquire write locks (all isolation levels)
+- **Read Operations**: 
+  - Serializable: Acquires and holds read locks until commit
+  - Other levels: No read locks, but may block on write locks
+- **Lock Upgrades**: Read locks can be upgraded to write locks
+- **Queue Management**: Pending write requests block new read requests to prevent starvation
+
+### Version Manager (MVCC Implementation)
+
+**Purpose**: Manages document versions for multi-version concurrency control
+
+**Key Components**:
+- **Version Chains**: Each document key maintains a chain of versions sorted by commit time
+- **Global Version Counter**: Monotonically increasing version numbers for ordering
+- **Cleanup Manager**: Removes old versions not needed by active transactions
+
+**Version Visibility Rules**:
+- **Read Uncommitted**: Sees the latest version including uncommitted changes
+- **Read Committed**: Sees all committed versions (versions added after commit)
+- **Repeatable Read/Serializable**: Only sees versions committed before transaction start
+- **Own Changes**: Transactions always see their own modifications
+
+**Implementation Details**:
+- Version chains use `ReaderWriterLockSlim` for concurrent access
+- Each version entry contains: Document, Version, TransactionId, CommitTime, IsDeleted flag
+- Cleanup runs asynchronously to maintain only necessary versions
+- Supports deletion tombstones for proper MVCC delete handling
 
 ### Cluster Manager
 

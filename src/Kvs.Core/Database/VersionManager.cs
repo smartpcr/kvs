@@ -72,10 +72,10 @@ internal class VersionManager
         var chain = this.versionChains.GetOrAdd(key, k => new VersionChain(k));
         var version = new DocumentVersionEntry
         {
-            Document = null,
             Version = this.GetNextVersion(),
             TransactionId = transactionId,
             CommitTime = commitTime,
+            Document = null,
             IsDeleted = true
         };
         chain.AddVersion(version);
